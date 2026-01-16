@@ -8,7 +8,7 @@ A VS Code extension for managing Ansible development environments, leveraging th
 
 The extension adds an **Ansible Environments** panel to the VS Code Activity Bar with four collapsible views:
 
-#### 🐍 Environment Managers
+#### Environment Managers
 
 - Lists all available Python environments grouped by manager type (venv, Global, Conda, etc.)
 - Click an environment to set it as the active Python environment for the workspace
@@ -17,7 +17,7 @@ The extension adds an **Ansible Environments** panel to the VS Code Activity Bar
 - **Refresh** button to reload the environment list
 - Auto-updates when the Python environment changes
 
-#### 📦 Ansible Dev Tools
+#### Ansible Dev Tools
 
 - Displays installed `ansible-dev-tools` packages and their versions
 - Uses `adt --version` to fetch package information
@@ -26,7 +26,7 @@ The extension adds an **Ansible Environments** panel to the VS Code Activity Bar
 - **Refresh** button to reload the package list
 - Auto-updates when the Python environment changes
 
-#### 📚 Collections
+#### Collections
 
 - Lists installed Ansible collections alphabetically
 - Expandable tree structure: Collection → Plugin Types → Plugins
@@ -38,7 +38,7 @@ The extension adds an **Ansible Environments** panel to the VS Code Activity Bar
 - **Database** button to refresh the Galaxy collections cache
 - Auto-updates when the Python environment changes
 
-#### 🐳 Execution Environments
+#### Execution Environments
 
 - Lists available container execution environments
 - Uses `ansible-navigator images` to discover execution environments
