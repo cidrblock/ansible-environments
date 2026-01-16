@@ -262,20 +262,8 @@ export class CreatorFormPanel {
             margin-bottom: 16px;
             padding-bottom: 10px;
             border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-        }
-        
-        .section-title .badge {
-            background: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            font-weight: 600;
         }
         
         .form-group {
@@ -362,18 +350,12 @@ export class CreatorFormPanel {
         <div class="description" id="description"></div>
         
         <div id="requiredSection" class="section" style="display: none;">
-            <div class="section-title">
-                Required Parameters
-                <span class="badge" id="requiredCount">0</span>
-            </div>
+            <div class="section-title">Required Parameters</div>
             <div id="requiredFields"></div>
         </div>
         
         <div id="optionalSection" class="section" style="display: none;">
-            <div class="section-title">
-                Optional Parameters
-                <span class="badge" id="optionalCount">0</span>
-            </div>
+            <div class="section-title">Optional Parameters</div>
             <div id="optionalFields"></div>
         </div>
         
@@ -449,11 +431,9 @@ export class CreatorFormPanel {
             // Show/hide sections
             if (requiredCount > 0) {
                 document.getElementById('requiredSection').style.display = 'block';
-                document.getElementById('requiredCount').textContent = requiredCount;
             }
             if (optionalCount > 0) {
                 document.getElementById('optionalSection').style.display = 'block';
-                document.getElementById('optionalCount').textContent = optionalCount;
             }
             
             // Set up buttons
@@ -461,6 +441,27 @@ export class CreatorFormPanel {
             document.getElementById('cancelBtn').addEventListener('click', cancel);
             
             updatePreview();
+            validateForm();
+        }
+        
+        function validateForm() {
+            const required = schema.parameters?.required || [];
+            let isValid = true;
+            
+            for (const key of required) {
+                const value = formValues[key];
+                if (value === undefined || value === null || value === '') {
+                    isValid = false;
+                    break;
+                }
+            }
+            
+            const executeBtn = document.getElementById('executeBtn');
+            if (isValid) {
+                executeBtn.removeAttribute('disabled');
+            } else {
+                executeBtn.setAttribute('disabled', '');
+            }
         }
         
         function createField(key, prop, isRequired) {
@@ -488,6 +489,7 @@ export class CreatorFormPanel {
                 input.addEventListener('change', (e) => {
                     formValues[key] = e.target.checked;
                     updatePreview();
+                    validateForm();
                 });
             } else if (prop.enum) {
                 input = document.createElement('vscode-dropdown');
@@ -512,6 +514,7 @@ export class CreatorFormPanel {
                 input.addEventListener('change', (e) => {
                     formValues[key] = e.target.value;
                     updatePreview();
+                    validateForm();
                 });
             } else {
                 input = document.createElement('vscode-textfield');
@@ -531,6 +534,7 @@ export class CreatorFormPanel {
                 input.addEventListener('input', (e) => {
                     formValues[key] = e.target.value;
                     updatePreview();
+                    validateForm();
                 });
             }
             

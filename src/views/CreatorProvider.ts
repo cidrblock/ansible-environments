@@ -29,10 +29,16 @@ class CategoryNode extends vscode.TreeItem {
         public readonly label: string,
         public readonly children: TreeNode[],
         public readonly commandPath: string[],
+        description?: string,
     ) {
         super(label, vscode.TreeItemCollapsibleState.Collapsed);
         this.contextValue = 'creatorCategory';
         this.iconPath = new vscode.ThemeIcon('folder');
+        
+        // Use description for tooltip
+        if (description) {
+            this.tooltip = description;
+        }
     }
 }
 
@@ -147,7 +153,7 @@ export class CreatorProvider implements vscode.TreeDataProvider<TreeNode> {
             }
         }
 
-        return new CategoryNode(label, children, path);
+        return new CategoryNode(label, children, path, schema.description);
     }
 
     private _formatLabel(name: string): string {
