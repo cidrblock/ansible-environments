@@ -1,0 +1,201 @@
+{
+  "name": "ansible-environments",
+  "displayName": "Ansible Environments",
+  "description": "A VS Code extension for managing Ansible development environments using the Microsoft Python Environments extension API",
+  "version": "0.0.1",
+  "publisher": "cidrblock",
+  "icon": "resources/ansible-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/*"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "ms-python.vscode-python-envs"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ansible-environments",
+          "title": "Ansible Environments",
+          "icon": "resources/ansible-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ansible-environments": [
+        {
+          "id": "ansibleDevToolsEnvManagers",
+          "name": "Environment Managers",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleDevToolsPackages",
+          "name": "Ansible Dev Tools",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleDevToolsCollections",
+          "name": "Collections",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleExecutionEnvironments",
+          "name": "Execution Environments",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleCreator",
+          "name": "Creator",
+          "type": "tree"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ansibleDevToolsPackages",
+        "contents": "No ansible-dev-tools packages found.\n[Install ansible-dev-tools](command:ansibleDevToolsPackages.install)",
+        "when": "!ansibleDevToolsPackages.hasPackages"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ansibleDevToolsPackages.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleDevToolsEnvManagers.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleDevToolsEnvManagers.create",
+        "title": "Create Environment",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ansibleDevTools.selectEnvironment",
+        "title": "Select Environment"
+      },
+      {
+        "command": "ansibleDevToolsCollections.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleDevToolsCollections.install",
+        "title": "Install Collection",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ansibleDevToolsCollections.refreshGalaxyCache",
+        "title": "Refresh Galaxy Cache",
+        "icon": "$(database)"
+      },
+      {
+        "command": "ansibleDevToolsPackages.install",
+        "title": "Install ansible-dev-tools",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ansibleDevToolsPackages.upgrade",
+        "title": "Upgrade ansible-dev-tools",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "ansibleExecutionEnvironments.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleCreator.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleCreator.openForm",
+        "title": "Open Creator Form"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ansibleDevToolsEnvManagers.create",
+          "when": "view == ansibleDevToolsEnvManagers",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleDevToolsEnvManagers.refresh",
+          "when": "view == ansibleDevToolsEnvManagers",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleDevToolsPackages.install",
+          "when": "view == ansibleDevToolsPackages",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleDevToolsPackages.upgrade",
+          "when": "view == ansibleDevToolsPackages",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleDevToolsPackages.refresh",
+          "when": "view == ansibleDevToolsPackages",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ansibleDevToolsCollections.install",
+          "when": "view == ansibleDevToolsCollections",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleDevToolsCollections.refresh",
+          "when": "view == ansibleDevToolsCollections",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleDevToolsCollections.refreshGalaxyCache",
+          "when": "view == ansibleDevToolsCollections",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ansibleExecutionEnvironments.refresh",
+          "when": "view == ansibleExecutionEnvironments",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleCreator.refresh",
+          "when": "view == ansibleCreator",
+          "group": "navigation@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@vscode-elements/elements": "^1.6.0"
+  }
+}
