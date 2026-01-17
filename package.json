@@ -6,7 +6,8 @@
   "publisher": "cidrblock",
   "icon": "resources/ansible-icon.png",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.85.0",
+    "node": ">=18.0.0"
   },
   "categories": [
     "Other"
@@ -15,6 +16,9 @@
     "workspaceContains:**/*"
   ],
   "main": "./out/extension.js",
+  "bin": {
+    "ansible-environments-mcp": "./out/mcp/server.js"
+  },
   "extensionDependencies": [
     "ms-python.vscode-python-envs"
   ],
@@ -53,6 +57,11 @@
         {
           "id": "ansibleCreator",
           "name": "Creator",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleMcpTools",
+          "name": "MCP Tools",
           "type": "tree"
         }
       ]
@@ -122,6 +131,28 @@
       {
         "command": "ansibleCreator.openForm",
         "title": "Open Creator Form"
+      },
+      {
+        "command": "ansible-environments.configureCursorMcp",
+        "title": "Ansible Environments: Configure Cursor MCP"
+      },
+      {
+        "command": "ansible-environments.showMcpStatus",
+        "title": "Ansible Environments: Show MCP Status"
+      },
+      {
+        "command": "ansibleMcpTools.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleMcpTools.useInChat",
+        "title": "Use in Chat"
+      },
+      {
+        "command": "ansibleMcpTools.copyPrompt",
+        "title": "Copy Prompt",
+        "icon": "$(clippy)"
       }
     ],
     "menus": {
@@ -175,6 +206,18 @@
           "command": "ansibleCreator.refresh",
           "when": "view == ansibleCreator",
           "group": "navigation@1"
+        },
+        {
+          "command": "ansibleMcpTools.refresh",
+          "when": "view == ansibleMcpTools",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ansibleMcpTools.copyPrompt",
+          "when": "view == ansibleMcpTools && viewItem == mcpTool",
+          "group": "inline"
         }
       ]
     }
@@ -196,6 +239,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@vscode-elements/elements": "^1.6.0"
   }
 }

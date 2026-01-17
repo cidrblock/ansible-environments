@@ -1,51 +1,11 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
-import * as path from 'path';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-
-interface PluginOption {
-    description?: string | string[];
-    type?: string;
-    default?: unknown;
-    choices?: string[];
-    required?: boolean;
-    elements?: string;
-    aliases?: string[];
-    suboptions?: { [key: string]: PluginOption };
-    version_added?: string;
-}
-
-interface PluginDoc {
-    author?: string | string[];
-    collection?: string;
-    description?: string | string[];
-    short_description?: string;
-    module?: string;
-    plugin_name?: string;
-    version_added?: string;
-    notes?: string | string[];
-    options?: { [key: string]: PluginOption };
-    seealso?: Array<{ module?: string; description?: string; link?: string; name?: string }>;
-    requirements?: string | string[];
-    attributes?: { [key: string]: unknown };
-}
-
-interface PluginReturn {
-    [key: string]: {
-        description?: string | string[];
-        returned?: string;
-        type?: string;
-        sample?: unknown;
-        contains?: { [key: string]: unknown };
-    };
-}
-
-interface PluginData {
-    doc?: PluginDoc;
-    examples?: string;
-    return?: PluginReturn;
-    metadata?: unknown;
-}
+import { 
+    CollectionsService, 
+    PluginOption, 
+    PluginDoc, 
+    PluginReturn, 
+    PluginData 
+} from '../services/CollectionsService';
 
 // Helper to normalize string or string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -99,53 +59,8 @@ export class PluginDocPanel {
         this._panel.webview.html = this._getLoadingHtml();
 
         try {
-            const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
-            if (!pythonEnvExtension) {
-                this._panel.webview.html = this._getErrorHtml('Python Environments extension not found');
-                return;
-            }
-
-            if (!pythonEnvExtension.isActive) {
-                await pythonEnvExtension.activate();
-            }
-
-            const api = pythonEnvExtension.exports;
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await api.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                this._panel.webview.html = this._getErrorHtml('No Python environment selected');
-                return;
-            }
-
-            const executable = environment.execInfo?.run?.executable;
-            if (!executable) {
-                this._panel.webview.html = this._getErrorHtml('Could not find Python executable');
-                return;
-            }
-
-            const envBinDir = path.dirname(executable);
-            const ansibleDocPath = path.join(envBinDir, 'ansible-doc');
-
-            // Map plugin types to ansible-doc type flag
-            const typeFlag = this._getTypeFlag(pluginType);
-
-            const result = await new Promise<string>((resolve, reject) => {
-                cp.exec(
-                    `"${ansibleDocPath}" ${typeFlag} "${pluginFullName}" --json`,
-                    { maxBuffer: 10 * 1024 * 1024 },
-                    (error, stdout, stderr) => {
-                        if (error) {
-                            reject(error);
-                            return;
-                        }
-                        resolve(stdout);
-                    }
-                );
-            });
-
-            const data = JSON.parse(result);
-            const pluginData: PluginData = data[pluginFullName];
+            const service = CollectionsService.getInstance();
+            const pluginData = await service.getPluginDocumentation(pluginFullName, pluginType);
 
             if (!pluginData || !pluginData.doc) {
                 this._panel.webview.html = this._getErrorHtml('Plugin documentation not found');
@@ -156,30 +71,6 @@ export class PluginDocPanel {
         } catch (error) {
             this._panel.webview.html = this._getErrorHtml(`Failed to load documentation: ${error}`);
         }
-    }
-
-    private _getTypeFlag(pluginType: string): string {
-        // ansible-doc uses -t for type
-        const typeMap: { [key: string]: string } = {
-            'module': '-t module',
-            'become': '-t become',
-            'cache': '-t cache',
-            'callback': '-t callback',
-            'cliconf': '-t cliconf',
-            'connection': '-t connection',
-            'filter': '-t filter',
-            'httpapi': '-t httpapi',
-            'inventory': '-t inventory',
-            'lookup': '-t lookup',
-            'netconf': '-t netconf',
-            'shell': '-t shell',
-            'strategy': '-t strategy',
-            'test': '-t test',
-            'vars': '-t vars',
-            'role': '-t role',
-            'keyword': '-t keyword'
-        };
-        return typeMap[pluginType] || '';
     }
 
     private _getLoadingHtml(): string {

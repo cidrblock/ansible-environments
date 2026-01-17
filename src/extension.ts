@@ -7,8 +7,15 @@ import { CollectionsProvider } from './views/CollectionsProvider';
 import { ExecutionEnvironmentsProvider } from './views/ExecutionEnvironmentsProvider';
 import { CreatorProvider } from './views/CreatorProvider';
 import { CreatorFormPanel } from './panels/CreatorFormPanel';
+import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
 import { GalaxyCollectionCache } from './services/GalaxyCollectionCache';
+import { CollectionsService } from './services/CollectionsService';
+import { DevToolsService } from './services/DevToolsService';
+import { ExecutionEnvService } from './services/ExecutionEnvService';
+import { CreatorService } from './services/CreatorService';
 import { PythonEnvironment, PythonEnvironmentApi } from './types/pythonEnvApi';
+import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus } from './mcp';
+import { cacheSelectedEnvironment } from './services/EnvironmentCache';
 
 // Create output channel for extension logs
 export const outputChannel = vscode.window.createOutputChannel('Ansible Environments');
@@ -23,6 +30,14 @@ export function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true); // Show the output channel on activation
     log('Ansible Environments extension is now active');
     console.log('Ansible Environments extension is now active');
+
+    // Register MCP server provider for VS Code Copilot integration
+    if (isMcpAvailable()) {
+        registerMcpServerProvider(context);
+        log('MCP server provider registered for VS Code');
+    } else {
+        log('VS Code MCP API not available (requires VS Code 1.99+)');
+    }
 
     // Check if workspace is open
     if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
@@ -70,6 +85,14 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(creatorView);
 
+    // Register the MCP Tools view
+    const mcpToolsProvider = new McpToolsProvider();
+    const mcpToolsView = vscode.window.createTreeView('ansibleMcpTools', {
+        treeDataProvider: mcpToolsProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(mcpToolsView);
+
     // Register sidebar commands
     const refreshCommand = vscode.commands.registerCommand(
         'ansibleDevToolsPackages.refresh',
@@ -82,30 +105,8 @@ export function activate(context: vscode.ExtensionContext) {
         'ansibleDevToolsPackages.install',
         async () => {
             try {
-                const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
-                if (!pythonEnvExtension) {
-                    vscode.window.showErrorMessage('Python Environments extension not found.');
-                    return;
-                }
-
-                if (!pythonEnvExtension.isActive) {
-                    await pythonEnvExtension.activate();
-                }
-
-                const api = pythonEnvExtension.exports;
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await api.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    vscode.window.showErrorMessage('Please select a Python environment first.');
-                    return;
-                }
-
-                await api.managePackages(environment, {
-                    install: ['ansible-dev-tools'],
-                    upgrade: false
-                });
-
+                const devToolsService = DevToolsService.getInstance();
+                await devToolsService.install();
                 vscode.window.showInformationMessage('ansible-dev-tools installation started.');
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to install ansible-dev-tools: ${error}`);
@@ -117,34 +118,8 @@ export function activate(context: vscode.ExtensionContext) {
         'ansibleDevToolsPackages.upgrade',
         async () => {
             try {
-                const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
-                if (!pythonEnvExtension) {
-                    vscode.window.showErrorMessage('Python Environments extension not found.');
-                    return;
-                }
-
-                if (!pythonEnvExtension.isActive) {
-                    await pythonEnvExtension.activate();
-                }
-
-                const api = pythonEnvExtension.exports;
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await api.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    vscode.window.showErrorMessage('Please select a Python environment first.');
-                    return;
-                }
-
-                // Use terminal for upgrade with --upgrade-strategy eager
-                const terminal = await api.createTerminal(environment, {
-                    name: 'Upgrade ansible-dev-tools',
-                    cwd: workspaceFolder
-                });
-                
-                terminal.show();
-                terminal.sendText('pip install --upgrade --upgrade-strategy eager ansible-dev-tools');
-
+                const devToolsService = DevToolsService.getInstance();
+                await devToolsService.upgrade();
                 vscode.window.showInformationMessage('Upgrading ansible-dev-tools...');
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to upgrade ansible-dev-tools: ${error}`);
@@ -264,6 +239,42 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    // Register Cursor MCP configuration commands
+    const configureCursorMcpCommand = vscode.commands.registerCommand(
+        'ansible-environments.configureCursorMcp',
+        () => configureCursorMcp(context)
+    );
+
+    const showMcpStatusCommand = vscode.commands.registerCommand(
+        'ansible-environments.showMcpStatus',
+        () => showCursorMcpStatus(context)
+    );
+
+    // Register MCP Tools commands
+    const mcpToolsRefreshCommand = vscode.commands.registerCommand(
+        'ansibleMcpTools.refresh',
+        () => mcpToolsProvider.refresh()
+    );
+
+    const mcpToolsUseInChatCommand = vscode.commands.registerCommand(
+        'ansibleMcpTools.useInChat',
+        async (toolInfo) => {
+            if (toolInfo) {
+                await injectToolPromptIntoChat(toolInfo);
+            }
+        }
+    );
+
+    const mcpToolsCopyPromptCommand = vscode.commands.registerCommand(
+        'ansibleMcpTools.copyPrompt',
+        async (node) => {
+            if (node && node.toolInfo) {
+                await vscode.env.clipboard.writeText(node.toolInfo.examplePrompt);
+                vscode.window.showInformationMessage(`Prompt copied: "${node.toolInfo.examplePrompt}"`);
+            }
+        }
+    );
+
     // Register Galaxy cache refresh command
     const galaxyCacheRefreshCommand = vscode.commands.registerCommand(
         'ansibleDevToolsCollections.refreshGalaxyCache',
@@ -278,26 +289,8 @@ export function activate(context: vscode.ExtensionContext) {
         'ansibleDevToolsCollections.install',
         async () => {
             try {
-                // Get Python environment first
-                const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
-                if (!pythonEnvExtension) {
-                    vscode.window.showErrorMessage('Python Environments extension not found.');
-                    return;
-                }
-
-                if (!pythonEnvExtension.isActive) {
-                    await pythonEnvExtension.activate();
-                }
-
-                const api = pythonEnvExtension.exports;
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await api.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    vscode.window.showErrorMessage('Please select a Python environment first.');
-                    return;
-                }
-
+                const collectionsService = CollectionsService.getInstance();
+                
                 // Show quick pick immediately
                 const quickPick = vscode.window.createQuickPick();
                 quickPick.title = 'Install Ansible Collection';
@@ -364,26 +357,12 @@ export function activate(context: vscode.ExtensionContext) {
                     
                     const collectionName = selected.label;
                     
-                    // Get ade path
-                    const executable = environment.execInfo?.run?.executable;
-                    if (!executable) {
-                        vscode.window.showErrorMessage('Could not find Python executable.');
-                        return;
+                    try {
+                        await collectionsService.installCollection(collectionName);
+                        vscode.window.showInformationMessage(`Installing collection ${collectionName}...`);
+                    } catch (error) {
+                        vscode.window.showErrorMessage(`Failed to install collection: ${error}`);
                     }
-
-                    const envBinDir = path.dirname(executable);
-                    const adePath = path.join(envBinDir, 'ade');
-
-                    // Create terminal and run ade install
-                    const terminal = await api.createTerminal(environment, {
-                        name: `Install ${collectionName}`,
-                        cwd: workspaceFolder
-                    });
-
-                    terminal.show();
-                    terminal.sendText(`"${adePath}" install ${collectionName}`);
-
-                    vscode.window.showInformationMessage(`Installing collection ${collectionName}...`);
                 });
 
                 quickPick.onDidHide(() => {
@@ -420,11 +399,16 @@ export function activate(context: vscode.ExtensionContext) {
         eeRefreshCommand,
         galaxyCacheRefreshCommand,
         creatorRefreshCommand,
-        creatorOpenFormCommand
+        creatorOpenFormCommand,
+        configureCursorMcpCommand,
+        showMcpStatusCommand,
+        mcpToolsRefreshCommand,
+        mcpToolsUseInChatCommand,
+        mcpToolsCopyPromptCommand
     );
 
-    // Check if Python Environments extension is available
-    const pythonEnvsExtension = vscode.extensions.getExtension('ms-python.vscode-python-envs');
+    // Check if Python Environments extension is available and set up environment caching
+    const pythonEnvsExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
     if (!pythonEnvsExtension) {
         vscode.window.showErrorMessage(
             'The Microsoft Python Environments extension is required. Please install it from the marketplace.',
@@ -437,6 +421,50 @@ export function activate(context: vscode.ExtensionContext) {
                 );
             }
         });
+    } else {
+        // Set up environment caching for standalone MCP server
+        // Use the same pattern as the UI providers - refresh cache when environment changes
+        (async () => {
+            try {
+                if (!pythonEnvsExtension.isActive) {
+                    await pythonEnvsExtension.activate();
+                }
+                const api = pythonEnvsExtension.exports;
+                
+                // Helper to refresh the cache - always fetches current environment from API
+                const refreshCache = async () => {
+                    try {
+                        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+                        const currentEnv = await api.getEnvironment(workspaceFolder);
+                        
+                        if (currentEnv?.execInfo?.run?.executable) {
+                            const execPath = currentEnv.execInfo.run.executable;
+                            log(`Caching environment: ${currentEnv.displayName} (${execPath})`);
+                            cacheSelectedEnvironment(execPath, currentEnv.displayName);
+                        } else {
+                            log(`No environment executable found to cache`);
+                        }
+                    } catch (error) {
+                        log(`Failed to refresh environment cache: ${error}`);
+                    }
+                };
+                
+                // Listen for environment changes - refresh cache when it changes
+                if (api.onDidChangeEnvironment) {
+                    const envCacheListener = api.onDidChangeEnvironment(async () => {
+                        // Use a small delay to ensure the change is fully processed
+                        setTimeout(refreshCache, 500);
+                    });
+                    context.subscriptions.push(envCacheListener);
+                }
+                
+                // Initial cache after a delay to let Python extension discover venvs
+                setTimeout(refreshCache, 2000);
+                
+            } catch (error) {
+                log(`Failed to set up environment caching: ${error}`);
+            }
+        })();
     }
 }
 

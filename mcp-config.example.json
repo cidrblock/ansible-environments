@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ansible-environments": {
+      "command": "node",
+      "args": ["/home/bthornto/github/python-ext-demo/out/mcp/server.js"],
+      "env": {}
+    }
+  }
+}

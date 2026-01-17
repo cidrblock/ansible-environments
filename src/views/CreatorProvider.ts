@@ -1,26 +1,6 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
+import { CreatorService, SchemaNode } from '../services/CreatorService';
 import { log } from '../extension';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-
-interface SchemaNode {
-    name: string;
-    description?: string;
-    parameters?: {
-        type: string;
-        properties: Record<string, ParameterSchema>;
-        required: string[];
-    };
-    subcommands?: Record<string, SchemaNode>;
-}
-
-interface ParameterSchema {
-    type: string;
-    description: string;
-    default?: unknown;
-    enum?: string[];
-    aliases?: string[];
-}
 
 type TreeNode = CategoryNode | CommandNode;
 
@@ -75,16 +55,24 @@ export class CreatorProvider implements vscode.TreeDataProvider<TreeNode> {
     private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | null | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-    private _schema: SchemaNode | null = null;
-    private _loading = false;
+    private _service: CreatorService;
+    private _serviceListener: vscode.Disposable | undefined;
 
     constructor() {
-        this._loadSchema();
+        this._service = CreatorService.getInstance();
+        this._service.setLogFunction(log);
+        
+        // Listen for service changes
+        this._serviceListener = (this._service.onDidChange as vscode.Event<void>)(() => {
+            this._onDidChangeTreeData.fire();
+        });
+        
+        // Initial load
+        this._service.loadSchema();
     }
 
     refresh(): void {
-        this._schema = null;
-        this._loadSchema();
+        this._service.refresh();
     }
 
     getTreeItem(element: TreeNode): vscode.TreeItem {
@@ -94,25 +82,26 @@ export class CreatorProvider implements vscode.TreeDataProvider<TreeNode> {
     async getChildren(element?: TreeNode): Promise<TreeNode[]> {
         if (!element) {
             // Root level - show Init and Add categories
-            if (this._loading) {
+            if (this._service.isLoading()) {
                 return [new CommandNode('Loading...', { name: 'loading' }, [])];
             }
 
-            if (!this._schema) {
+            const schema = this._service.getSchema();
+            if (!schema) {
                 return [new CommandNode('Schema not loaded', { name: 'error' }, [])];
             }
 
             const children: TreeNode[] = [];
 
             // Add "Init" category
-            if (this._schema.subcommands?.init) {
-                const initNode = this._buildCategoryNode('Init', this._schema.subcommands.init, ['init']);
+            if (schema.subcommands?.init) {
+                const initNode = this._buildCategoryNode('Init', schema.subcommands.init, ['init']);
                 children.push(initNode);
             }
 
             // Add "Add" category
-            if (this._schema.subcommands?.add) {
-                const addNode = this._buildCategoryNode('Add', this._schema.subcommands.add, ['add']);
+            if (schema.subcommands?.add) {
+                const addNode = this._buildCategoryNode('Add', schema.subcommands.add, ['add']);
                 children.push(addNode);
             }
 
@@ -164,80 +153,12 @@ export class CreatorProvider implements vscode.TreeDataProvider<TreeNode> {
             .join(' ');
     }
 
-    private async _loadSchema(): Promise<void> {
-        if (this._loading) {
-            return;
-        }
-
-        this._loading = true;
-        this._onDidChangeTreeData.fire();
-
-        try {
-            const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>(
-                'ms-python.vscode-python-envs',
-            );
-            
-            if (!pythonEnvExtension) {
-                log('CreatorProvider: Python Environments extension not found');
-                this._loading = false;
-                this._onDidChangeTreeData.fire();
-                return;
-            }
-
-            if (!pythonEnvExtension.isActive) {
-                await pythonEnvExtension.activate();
-            }
-
-            const api = pythonEnvExtension.exports;
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await api.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                log('CreatorProvider: No Python environment selected');
-                this._loading = false;
-                this._onDidChangeTreeData.fire();
-                return;
-            }
-
-            const executable = environment.execInfo?.run?.executable;
-            if (!executable) {
-                log('CreatorProvider: No Python executable found');
-                this._loading = false;
-                this._onDidChangeTreeData.fire();
-                return;
-            }
-
-            // Run ansible-creator schema
-            const output = await this._runCommand(`"${executable}" -m ansible_creator schema`);
-            
-            if (output) {
-                this._schema = JSON.parse(output);
-                log(`CreatorProvider: Schema loaded successfully`);
-            }
-        } catch (error) {
-            log(`CreatorProvider: Error loading schema: ${error}`);
-        } finally {
-            this._loading = false;
-            this._onDidChangeTreeData.fire();
-        }
-    }
-
-    private _runCommand(command: string): Promise<string | null> {
-        return new Promise((resolve) => {
-            const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            
-            cp.exec(command, { cwd, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-                if (error) {
-                    log(`CreatorProvider: Command error: ${error.message}`);
-                    resolve(null);
-                    return;
-                }
-                resolve(stdout.trim());
-            });
-        });
-    }
-
     public getSchema(): SchemaNode | null {
-        return this._schema;
+        return this._service.getSchema();
+    }
+    
+    dispose() {
+        this._serviceListener?.dispose();
+        this._onDidChangeTreeData.dispose();
     }
 }
