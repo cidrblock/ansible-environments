@@ -17,12 +17,19 @@ export class CreatorToolGenerator {
             return;
         }
 
-        const service = CreatorService.getInstance();
-        const schema = await service.loadSchema();
+        try {
+            const service = CreatorService.getInstance();
+            const schema = await service.loadSchema();
 
-        if (schema) {
-            this._tools = this._generateTools(schema);
-            this._initialized = true;
+            if (schema) {
+                this._tools = this._generateTools(schema);
+                this._initialized = true;
+                console.error(`CreatorToolGenerator: Loaded ${this._tools.length} creator tools`);
+            } else {
+                console.error('CreatorToolGenerator: No schema returned from CreatorService');
+            }
+        } catch (error) {
+            console.error(`CreatorToolGenerator: Failed to initialize: ${error}`);
         }
     }
 

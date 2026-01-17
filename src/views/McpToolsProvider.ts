@@ -8,6 +8,7 @@
 import * as vscode from 'vscode';
 import { STATIC_TOOLS, McpToolDefinition } from '../mcp/tools';
 import { CreatorToolGenerator } from '../mcp/creatorTools';
+import { CreatorService } from '../services';
 import { log } from '../extension';
 
 type ToolCategory = 'discovery' | 'generation' | 'execution' | 'devtools' | 'creator';
@@ -100,10 +101,25 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
     private _tools: ToolInfo[] = [];
     private _creatorToolGenerator: CreatorToolGenerator;
     private _isLoading = false;
+    private _creatorServiceListener: vscode.Disposable | undefined;
 
     constructor() {
         this._creatorToolGenerator = new CreatorToolGenerator();
+        
+        // Listen for CreatorService changes to auto-refresh when schema loads
+        const creatorService = CreatorService.getInstance();
+        this._creatorServiceListener = (creatorService.onDidChange as vscode.Event<void>)(() => {
+            if (creatorService.isLoaded()) {
+                log('McpToolsProvider: CreatorService loaded, refreshing tools...');
+                this._loadTools();
+            }
+        });
+        
         this._loadTools();
+    }
+
+    dispose(): void {
+        this._creatorServiceListener?.dispose();
     }
 
     refresh(): void {
@@ -128,8 +144,10 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
 
             // Load dynamic creator tools
             try {
+                log('McpToolsProvider: Loading creator tools...');
                 await this._creatorToolGenerator.refresh();
                 const creatorTools = this._creatorToolGenerator.getTools();
+                log(`McpToolsProvider: CreatorToolGenerator returned ${creatorTools.length} tools`);
                 
                 for (const tool of creatorTools) {
                     const examplePrompt = this._generateExamplePrompt(tool);
