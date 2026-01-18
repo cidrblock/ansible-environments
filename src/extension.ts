@@ -681,7 +681,14 @@ Please:
         async (node) => {
             if (node && node.toolInfo) {
                 await vscode.env.clipboard.writeText(node.toolInfo.examplePrompt);
-                vscode.window.showInformationMessage('AI prompt copied to clipboard. Paste it into an agent chat session.');
+                vscode.window.showInformationMessage(
+                    'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                    'Open Chat'
+                ).then(selection => {
+                    if (selection === 'Open Chat') {
+                        vscode.commands.executeCommand('workbench.action.chat.open');
+                    }
+                });
             }
         }
     );
