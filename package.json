@@ -60,6 +60,11 @@
           "type": "tree"
         },
         {
+          "id": "ansiblePlaybooks",
+          "name": "Playbooks",
+          "type": "tree"
+        },
+        {
           "id": "ansibleMcpTools",
           "name": "✨ AI Tools",
           "type": "tree"
@@ -163,6 +168,40 @@
         "command": "ansibleMcpTools.configure",
         "title": "Configure MCP",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ansiblePlaybooks.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansiblePlaybooks.editConfig",
+        "title": "Edit Configuration",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "ansiblePlaybooks.editDefaults",
+        "title": "Edit Default Configuration",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "ansiblePlaybooks.run",
+        "title": "Run Playbook",
+        "icon": "$(play)"
+      },
+      {
+        "command": "ansiblePlaybooks.openPlaybook",
+        "title": "Edit Playbook",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "ansiblePlaybooks.goToPlay",
+        "title": "Go to Play"
+      },
+      {
+        "command": "ansiblePlaybooks.aiSummary",
+        "title": "Generate AI Summary",
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -226,9 +265,39 @@
           "command": "ansibleMcpTools.refresh",
           "when": "view == ansibleMcpTools",
           "group": "navigation@1"
+        },
+        {
+          "command": "ansiblePlaybooks.editDefaults",
+          "when": "view == ansiblePlaybooks",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansiblePlaybooks.refresh",
+          "when": "view == ansiblePlaybooks",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
+        {
+          "command": "ansiblePlaybooks.run",
+          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "group": "inline@1"
+        },
+        {
+          "command": "ansiblePlaybooks.openPlaybook",
+          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "group": "inline@2"
+        },
+        {
+          "command": "ansiblePlaybooks.editConfig",
+          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "group": "inline@3"
+        },
+        {
+          "command": "ansiblePlaybooks.aiSummary",
+          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "group": "inline@4"
+        },
         {
           "command": "ansibleMcpTools.copyPrompt",
           "when": "view == ansibleMcpTools && viewItem == mcpTool",

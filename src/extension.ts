@@ -7,6 +7,9 @@ import { CollectionsProvider } from './views/CollectionsProvider';
 import { ExecutionEnvironmentsProvider } from './views/ExecutionEnvironmentsProvider';
 import { CreatorProvider } from './views/CreatorProvider';
 import { CreatorFormPanel } from './panels/CreatorFormPanel';
+import { PlaybooksProvider } from './views/PlaybooksProvider';
+import { PlaybookConfigPanel } from './panels/PlaybookConfigPanel';
+import { PlaybooksService, PlaybookInfo, PlaybookPlay } from './services/PlaybooksService';
 import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
 import { GalaxyCollectionCache } from './services/GalaxyCollectionCache';
 import { CollectionsService, setLogFunction as setCollectionsLogFunction } from './services/CollectionsService';
@@ -98,6 +101,14 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
     context.subscriptions.push(creatorView);
+
+    // Register the Playbooks view
+    const playbooksProvider = new PlaybooksProvider();
+    const playbooksView = vscode.window.createTreeView('ansiblePlaybooks', {
+        treeDataProvider: playbooksProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(playbooksView);
 
     // Register the MCP Tools view
     const mcpToolsProvider = new McpToolsProvider(context);
@@ -347,6 +358,120 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    // Register Playbooks commands
+    const playbooksRefreshCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.refresh',
+        () => {
+            playbooksProvider.refresh();
+        }
+    );
+
+    const playbooksEditConfigCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.editConfig',
+        (node: { playbook: PlaybookInfo }) => {
+            if (node && node.playbook) {
+                PlaybookConfigPanel.show(context.extensionUri, node.playbook);
+            }
+        }
+    );
+
+    const playbooksEditDefaultsCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.editDefaults',
+        () => {
+            PlaybookConfigPanel.show(context.extensionUri);
+        }
+    );
+
+    const playbooksRunCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.run',
+        async (node: { playbook: PlaybookInfo }) => {
+            if (node && node.playbook) {
+                const service = PlaybooksService.getInstance();
+                const config = service.getPlaybookConfig(node.playbook.relativePath);
+                const command = service.buildCommand(node.playbook.relativePath, config);
+
+                log(`Running playbook: ${command}`);
+
+                // Try to use Python environment terminal
+                const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
+                
+                if (pythonEnvExtension) {
+                    if (!pythonEnvExtension.isActive) {
+                        await pythonEnvExtension.activate();
+                    }
+                    
+                    const api = pythonEnvExtension.exports;
+                    const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+                    const environment = await api.getEnvironment(workspaceFolder);
+
+                    if (environment) {
+                        const terminal = await api.createTerminal(environment, {
+                            name: `ansible-playbook: ${node.playbook.name}`,
+                            cwd: workspaceFolder,
+                        });
+                        terminal.show();
+                        terminal.sendText(command);
+                        return;
+                    }
+                }
+
+                // Fallback to regular terminal
+                const terminal = vscode.window.createTerminal({
+                    name: `ansible-playbook: ${node.playbook.name}`,
+                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri,
+                });
+                terminal.show();
+                terminal.sendText(command);
+            }
+        }
+    );
+
+    const playbooksOpenCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.openPlaybook',
+        async (arg: PlaybookInfo | { playbook: PlaybookInfo }) => {
+            // Handle both direct PlaybookInfo and node wrapper from context menu
+            const playbook = (arg as { playbook: PlaybookInfo }).playbook || arg as PlaybookInfo;
+            if (playbook && playbook.path) {
+                const doc = await vscode.workspace.openTextDocument(playbook.path);
+                await vscode.window.showTextDocument(doc);
+            }
+        }
+    );
+
+    const playbooksGoToPlayCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.goToPlay',
+        async (playbook: PlaybookInfo, play: PlaybookPlay) => {
+            if (playbook && play) {
+                const doc = await vscode.workspace.openTextDocument(playbook.path);
+                const editor = await vscode.window.showTextDocument(doc);
+                const line = play.lineNumber - 1;
+                const position = new vscode.Position(line, 0);
+                editor.selection = new vscode.Selection(position, position);
+                editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+            }
+        }
+    );
+
+    const playbooksAiSummaryCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.aiSummary',
+        async (node: { playbook: PlaybookInfo }) => {
+            if (node && node.playbook) {
+                const service = PlaybooksService.getInstance();
+                const prompt = service.generateAiPrompt(node.playbook);
+                
+                await vscode.env.clipboard.writeText(prompt);
+                vscode.window.showInformationMessage(
+                    'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                    'Open Chat'
+                ).then(selection => {
+                    if (selection === 'Open Chat') {
+                        vscode.commands.executeCommand('workbench.action.chat.open');
+                    }
+                });
+            }
+        }
+    );
+
     // Register Cursor MCP configuration commands
     const configureCursorMcpCommand = vscode.commands.registerCommand(
         'ansible-environments.configureCursorMcp',
@@ -535,6 +660,13 @@ export function activate(context: vscode.ExtensionContext) {
         galaxyCacheRefreshCommand,
         creatorRefreshCommand,
         creatorOpenFormCommand,
+        playbooksRefreshCommand,
+        playbooksEditConfigCommand,
+        playbooksEditDefaultsCommand,
+        playbooksRunCommand,
+        playbooksOpenCommand,
+        playbooksGoToPlayCommand,
+        playbooksAiSummaryCommand,
         configureCursorMcpCommand,
         showMcpStatusCommand,
         mcpToolsRefreshCommand,
