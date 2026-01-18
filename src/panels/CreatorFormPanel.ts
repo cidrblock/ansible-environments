@@ -84,6 +84,16 @@ export class CreatorFormPanel {
                     case 'cancel':
                         this._panel.dispose();
                         break;
+                    case 'updateSettings':
+                        // Save settings to workspace configuration
+                        const config = vscode.workspace.getConfiguration('ansibleEnvironments');
+                        if (message.zoom !== undefined) {
+                            await config.update('pluginDocZoom', message.zoom, vscode.ConfigurationTarget.Workspace);
+                        }
+                        if (message.theme !== undefined) {
+                            await config.update('pluginDocTheme', message.theme, vscode.ConfigurationTarget.Workspace);
+                        }
+                        break;
                 }
             },
             null,
@@ -189,9 +199,20 @@ export class CreatorFormPanel {
         const schemaJson = JSON.stringify(this._schema);
         const commandPathJson = JSON.stringify(this._commandPath);
         const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || './';
+        
+        // Get settings
+        const config = vscode.workspace.getConfiguration('ansibleEnvironments');
+        const zoom = config.get<number>('pluginDocZoom', 100);
+        const themeSetting = config.get<string>('pluginDocTheme', 'auto');
+        
+        // Resolve 'auto' to actual theme based on VS Code's current theme
+        const vscodeThemeKind = vscode.window.activeColorTheme.kind;
+        const isVsCodeLight = vscodeThemeKind === vscode.ColorThemeKind.Light || 
+                              vscodeThemeKind === vscode.ColorThemeKind.HighContrastLight;
+        const resolvedTheme = themeSetting === 'auto' ? (isVsCodeLight ? 'light' : 'dark') : themeSetting;
 
         return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="${resolvedTheme}" data-theme-setting="${themeSetting}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -206,6 +227,32 @@ export class CreatorFormPanel {
             --button-bg: var(--vscode-button-background);
             --button-fg: var(--vscode-button-foreground);
             --error: var(--vscode-errorForeground);
+            --toolbar-bg: var(--vscode-editor-background);
+            --toolbar-border: var(--vscode-panel-border);
+            --success: #28a745;
+        }
+        
+        /* Light theme overrides */
+        [data-theme="light"] {
+            --bg: #ffffff;
+            --fg: #1b1f24;
+            --border: #d0d7de;
+            --input-bg: #f6f8fa;
+            --section-bg: #f6f8fa;
+            --desc-fg: #656d76;
+            --label-fg: #1b1f24;
+            --toolbar-bg: rgba(255, 255, 255, 0.95);
+        }
+        
+        /* Dark theme overrides */
+        [data-theme="dark"] {
+            --bg: #0d1117;
+            --fg: #e6edf3;
+            --border: #30363d;
+            --input-bg: #161b22;
+            --section-bg: rgba(128, 128, 128, 0.08);
+            --desc-fg: #8b949e;
+            --toolbar-bg: rgba(13, 17, 23, 0.95);
         }
         
         * { box-sizing: border-box; }
@@ -215,8 +262,66 @@ export class CreatorFormPanel {
             font-size: var(--vscode-font-size);
             color: var(--fg);
             background: var(--bg);
-            padding: 20px;
+            padding: 0;
             margin: 0;
+        }
+        
+        .toolbar {
+            position: fixed;
+            top: 12px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--toolbar-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+            backdrop-filter: blur(8px);
+        }
+        
+        .toolbar-btn {
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            opacity: 0.7;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            min-width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .toolbar-btn:hover {
+            background: var(--input-bg);
+            opacity: 1;
+        }
+        
+        .zoom-label {
+            font-size: 11px;
+            color: var(--fg);
+            opacity: 0.7;
+            min-width: 40px;
+            text-align: center;
+        }
+        
+        .toolbar-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--border);
+            margin: 0 4px;
+        }
+        
+        .main-content {
+            padding: 20px;
+            padding-top: 60px;
+            zoom: ${zoom / 100};
         }
         
         .container {
@@ -238,19 +343,19 @@ export class CreatorFormPanel {
         
         .header .command-path {
             font-family: monospace;
-            color: var(--vscode-descriptionForeground);
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
             font-size: 12px;
         }
         
         .description {
-            color: var(--vscode-descriptionForeground);
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
             margin-bottom: 24px;
             font-size: 13px;
         }
         
         .section {
             margin-bottom: 24px;
-            background: rgba(128, 128, 128, 0.08);
+            background: var(--section-bg, rgba(128, 128, 128, 0.08));
             border: 1px solid var(--border);
             border-radius: 6px;
             padding: 16px;
@@ -264,6 +369,7 @@ export class CreatorFormPanel {
             border-bottom: 1px solid var(--border);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            color: var(--fg);
         }
         
         .form-group {
@@ -279,7 +385,7 @@ export class CreatorFormPanel {
             margin-bottom: 6px;
             font-weight: 600;
             font-size: 13px;
-            color: var(--vscode-foreground);
+            color: var(--fg);
         }
         
         .form-group .required {
@@ -289,20 +395,24 @@ export class CreatorFormPanel {
         
         .form-group .help-text {
             font-size: 11px;
-            color: var(--vscode-descriptionForeground);
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
             margin-top: 6px;
             line-height: 1.4;
         }
         
         .form-group .default-text {
             font-size: 11px;
-            color: var(--vscode-descriptionForeground);
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
             font-style: italic;
             margin-top: 4px;
         }
         
         vscode-textfield, vscode-dropdown {
             width: 100%;
+        }
+        
+        vscode-checkbox {
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
         }
         
         .button-row {
@@ -321,7 +431,7 @@ export class CreatorFormPanel {
         .preview-label {
             font-size: 11px;
             font-weight: 600;
-            color: var(--vscode-descriptionForeground);
+            color: var(--desc-fg, var(--vscode-descriptionForeground));
             margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -341,6 +451,14 @@ export class CreatorFormPanel {
     </style>
 </head>
 <body>
+    <div class="toolbar">
+        <button id="zoom-out-btn" class="toolbar-btn" title="Zoom out">−</button>
+        <span class="zoom-label" id="zoom-level">${zoom}%</span>
+        <button id="zoom-in-btn" class="toolbar-btn" title="Zoom in">+</button>
+        <div class="toolbar-divider"></div>
+        <button id="theme-toggle-btn" class="toolbar-btn" title="Toggle theme">${themeSetting}</button>
+    </div>
+    <div class="main-content">
     <div class="container">
         <div class="header">
             <h1 id="title">ansible-creator</h1>
@@ -369,9 +487,79 @@ export class CreatorFormPanel {
             <vscode-button id="executeBtn">Run</vscode-button>
         </div>
     </div>
+    </div>
     
     <script>
         const vscode = acquireVsCodeApi();
+        
+        // Zoom functionality
+        (function() {
+            let currentZoom = ${zoom};
+            const minZoom = 50;
+            const maxZoom = 200;
+            const zoomStep = 10;
+            
+            const zoomInBtn = document.getElementById('zoom-in-btn');
+            const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const zoomLevel = document.getElementById('zoom-level');
+            const mainContent = document.querySelector('.main-content');
+            
+            function updateZoom(save) {
+                if (mainContent) {
+                    mainContent.style.zoom = (currentZoom / 100);
+                }
+                if (zoomLevel) zoomLevel.textContent = currentZoom + '%';
+                if (save) {
+                    vscode.postMessage({ command: 'updateSettings', zoom: currentZoom });
+                }
+            }
+            
+            if (zoomInBtn) {
+                zoomInBtn.onclick = function() {
+                    if (currentZoom < maxZoom) {
+                        currentZoom += zoomStep;
+                        updateZoom(true);
+                    }
+                };
+            }
+            
+            if (zoomOutBtn) {
+                zoomOutBtn.onclick = function() {
+                    if (currentZoom > minZoom) {
+                        currentZoom -= zoomStep;
+                        updateZoom(true);
+                    }
+                };
+            }
+        })();
+        
+        // Theme toggle functionality
+        (function() {
+            const themeToggleBtn = document.getElementById('theme-toggle-btn');
+            const themes = ['auto', 'light', 'dark'];
+            let currentThemeSetting = document.documentElement.getAttribute('data-theme-setting') || 'auto';
+            
+            function updateThemeButton() {
+                if (themeToggleBtn) {
+                    themeToggleBtn.textContent = currentThemeSetting;
+                }
+            }
+            
+            if (themeToggleBtn) {
+                themeToggleBtn.onclick = function() {
+                    const currentIndex = themes.indexOf(currentThemeSetting);
+                    currentThemeSetting = themes[(currentIndex + 1) % themes.length];
+                    
+                    // For 'auto', we keep the current resolved theme but update the setting
+                    const displayTheme = currentThemeSetting === 'auto' ? 'dark' : currentThemeSetting;
+                    document.documentElement.setAttribute('data-theme', displayTheme);
+                    document.documentElement.setAttribute('data-theme-setting', currentThemeSetting);
+                    
+                    updateThemeButton();
+                    vscode.postMessage({ command: 'updateSettings', theme: currentThemeSetting });
+                };
+            }
+        })();
         const schema = ${schemaJson};
         const commandPath = ${commandPathJson};
         const workspacePath = ${JSON.stringify(workspacePath)};
