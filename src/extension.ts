@@ -531,8 +531,13 @@ Please:
 
     const creatorOpenFormCommand = vscode.commands.registerCommand(
         'ansibleCreator.openForm',
-        (commandPath: string[], schema: unknown) => {
-            CreatorFormPanel.show(context.extensionUri, commandPath, schema as any);
+        (arg1: string[] | { commandPath: string[]; schema: unknown }, arg2?: unknown) => {
+            // Handle both direct call (commandPath, schema) and context menu call (node)
+            if (Array.isArray(arg1)) {
+                CreatorFormPanel.show(context.extensionUri, arg1, arg2 as any);
+            } else if (arg1 && arg1.commandPath) {
+                CreatorFormPanel.show(context.extensionUri, arg1.commandPath, arg1.schema as any);
+            }
         }
     );
 
@@ -610,8 +615,9 @@ Please:
             // Handle both direct PlaybookInfo and node wrapper from context menu
             const playbook = (arg as { playbook: PlaybookInfo }).playbook || arg as PlaybookInfo;
             if (playbook && playbook.path) {
-                const doc = await vscode.workspace.openTextDocument(playbook.path);
-                await vscode.window.showTextDocument(doc);
+                // Use vscode.open command which handles files more robustly
+                const uri = vscode.Uri.file(playbook.path);
+                await vscode.commands.executeCommand('vscode.open', uri);
             }
         }
     );
@@ -620,12 +626,12 @@ Please:
         'ansiblePlaybooks.goToPlay',
         async (playbook: PlaybookInfo, play: PlaybookPlay) => {
             if (playbook && play) {
-                const doc = await vscode.workspace.openTextDocument(playbook.path);
-                const editor = await vscode.window.showTextDocument(doc);
+                const uri = vscode.Uri.file(playbook.path);
                 const line = play.lineNumber - 1;
-                const position = new vscode.Position(line, 0);
-                editor.selection = new vscode.Selection(position, position);
-                editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+                // Use vscode.open with selection option to go to specific line
+                await vscode.commands.executeCommand('vscode.open', uri, {
+                    selection: new vscode.Range(line, 0, line, 0)
+                });
             }
         }
     );
@@ -830,6 +836,16 @@ Please:
         }
     );
 
+    // Register plugin documentation command for context menu
+    const collectionsShowPluginDocCommand = vscode.commands.registerCommand(
+        'ansibleDevToolsCollections.showPluginDoc',
+        async (node: { fullName: string; pluginType: string }) => {
+            if (node?.fullName && node?.pluginType) {
+                await PluginDocPanel.show(context.extensionUri, node.fullName, node.pluginType);
+            }
+        }
+    );
+
     context.subscriptions.push(
         refreshCommand, 
         installCommand, 
@@ -843,6 +859,7 @@ Please:
         collectionsAiSummaryCommand,
         collectionsAiCollectionSummaryCommand,
         collectionsAiPluginSummaryCommand,
+        collectionsShowPluginDocCommand,
         showPluginDocCommand,
         eeRefreshCommand,
         eeAiSummaryCommand,

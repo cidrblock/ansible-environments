@@ -129,6 +129,11 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "ansibleDevToolsCollections.showPluginDoc",
+        "title": "View Documentation",
+        "icon": "$(book)"
+      },
+      {
         "command": "ansibleDevToolsCollections.aiPluginSummary",
         "title": "Generate AI Summary",
         "icon": "$(sparkle)"
@@ -175,7 +180,8 @@
       },
       {
         "command": "ansibleCreator.openForm",
-        "title": "Open Creator Form"
+        "title": "Open Form",
+        "icon": "$(window)"
       },
       {
         "command": "ansible-environments.configureCursorMcp",
@@ -334,9 +340,14 @@
           "group": "inline"
         },
         {
+          "command": "ansibleDevToolsCollections.showPluginDoc",
+          "when": "view == ansibleDevToolsCollections && viewItem == plugin",
+          "group": "inline@1"
+        },
+        {
           "command": "ansibleDevToolsCollections.aiPluginSummary",
           "when": "view == ansibleDevToolsCollections && viewItem == plugin",
-          "group": "inline"
+          "group": "inline@2"
         },
         {
           "command": "ansibleExecutionEnvironments.aiEESummary",
@@ -344,9 +355,14 @@
           "group": "inline"
         },
         {
+          "command": "ansibleCreator.openForm",
+          "when": "view == ansibleCreator && viewItem == creatorCommand",
+          "group": "inline@1"
+        },
+        {
           "command": "ansibleCreator.aiEntrySummary",
           "when": "view == ansibleCreator && viewItem == creatorCommand",
-          "group": "inline"
+          "group": "inline@2"
         },
         {
           "command": "ansiblePlaybooks.run",
