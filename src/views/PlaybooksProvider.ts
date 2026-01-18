@@ -1,8 +1,23 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { PlaybooksService, PlaybookInfo, PlaybookPlay } from '../services/PlaybooksService';
 import { log } from '../extension';
 
-type TreeNode = PlaybookNode | PlayNode | LoadingNode;
+type TreeNode = WorkspaceFolderNode | FolderNode | PlaybookNode | PlayNode | LoadingNode;
+
+class WorkspaceFolderNode {
+    constructor(
+        public readonly folder: vscode.WorkspaceFolder
+    ) {}
+}
+
+class FolderNode {
+    constructor(
+        public readonly name: string,
+        public readonly fullPath: string,
+        public readonly workspaceFolder: vscode.WorkspaceFolder
+    ) {}
+}
 
 class PlaybookNode {
     constructor(
@@ -19,6 +34,11 @@ class PlayNode {
 
 class LoadingNode {
     constructor(public readonly message: string) {}
+}
+
+interface FolderTree {
+    folders: Map<string, FolderTree>;
+    playbooks: PlaybookInfo[];
 }
 
 export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
@@ -50,10 +70,32 @@ export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
             return item;
         }
 
+        if (element instanceof WorkspaceFolderNode) {
+            const item = new vscode.TreeItem(
+                element.folder.name,
+                vscode.TreeItemCollapsibleState.Expanded
+            );
+            item.iconPath = new vscode.ThemeIcon('root-folder');
+            item.contextValue = 'workspaceFolder';
+            item.tooltip = element.folder.uri.fsPath;
+            return item;
+        }
+
+        if (element instanceof FolderNode) {
+            const item = new vscode.TreeItem(
+                element.name,
+                vscode.TreeItemCollapsibleState.Collapsed
+            );
+            item.iconPath = new vscode.ThemeIcon('folder');
+            item.contextValue = 'folder';
+            item.tooltip = element.fullPath;
+            return item;
+        }
+
         if (element instanceof PlaybookNode) {
             const playbook = element.playbook;
             const item = new vscode.TreeItem(
-                playbook.name,
+                path.basename(playbook.path),
                 vscode.TreeItemCollapsibleState.Collapsed
             );
             
@@ -64,7 +106,7 @@ export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
             // Tooltip with path and details
             const tooltip = new vscode.MarkdownString();
             tooltip.appendMarkdown(`**${playbook.name}**\n\n`);
-            tooltip.appendMarkdown(`📂 \`${playbook.relativePath}\`\n\n`);
+            tooltip.appendMarkdown(`📂 \`${playbook.path}\`\n\n`);
             tooltip.appendMarkdown(`**Plays:**\n`);
             for (const play of playbook.plays) {
                 tooltip.appendMarkdown(`- ${play.name} (hosts: \`${play.hosts}\`)\n`);
@@ -114,7 +156,7 @@ export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
 
     async getChildren(element?: TreeNode): Promise<TreeNode[]> {
         if (!element) {
-            // Root level - show playbooks
+            // Root level
             if (this._service.isLoading()) {
                 return [new LoadingNode('Discovering playbooks...')];
             }
@@ -128,7 +170,30 @@ export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
                 return [new LoadingNode('Discovering playbooks...')];
             }
 
-            return playbooks.map(pb => new PlaybookNode(pb));
+            const workspaceFolders = vscode.workspace.workspaceFolders || [];
+            
+            // Single workspace - show folder hierarchy directly
+            if (workspaceFolders.length === 1) {
+                return this._buildFolderHierarchy(playbooks, workspaceFolders[0]);
+            }
+            
+            // Multi-root - show workspace folders as top level
+            return workspaceFolders.map(folder => new WorkspaceFolderNode(folder));
+        }
+
+        if (element instanceof WorkspaceFolderNode) {
+            // Show folder hierarchy for this workspace
+            const allPlaybooks = this._service.getPlaybooks();
+            const folderPath = element.folder.uri.fsPath;
+            const folderPlaybooks = allPlaybooks.filter(pb => pb.path.startsWith(folderPath));
+            return this._buildFolderHierarchy(folderPlaybooks, element.folder);
+        }
+
+        if (element instanceof FolderNode) {
+            // Show contents of this folder
+            const allPlaybooks = this._service.getPlaybooks();
+            const folderPlaybooks = allPlaybooks.filter(pb => pb.path.startsWith(element.fullPath));
+            return this._buildFolderContents(folderPlaybooks, element.fullPath, element.workspaceFolder);
         }
 
         if (element instanceof PlaybookNode) {
@@ -137,5 +202,53 @@ export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         return [];
+    }
+
+    private _buildFolderHierarchy(playbooks: PlaybookInfo[], workspaceFolder: vscode.WorkspaceFolder): TreeNode[] {
+        const rootPath = workspaceFolder.uri.fsPath;
+        return this._buildFolderContents(playbooks, rootPath, workspaceFolder);
+    }
+
+    private _buildFolderContents(playbooks: PlaybookInfo[], folderPath: string, workspaceFolder: vscode.WorkspaceFolder): TreeNode[] {
+        const nodes: TreeNode[] = [];
+        const subfolders = new Map<string, PlaybookInfo[]>();
+        const directPlaybooks: PlaybookInfo[] = [];
+
+        for (const playbook of playbooks) {
+            const relativePath = path.relative(folderPath, playbook.path);
+            const parts = relativePath.split(path.sep);
+
+            if (parts.length === 1) {
+                // Playbook is directly in this folder
+                directPlaybooks.push(playbook);
+            } else {
+                // Playbook is in a subfolder
+                const subfolderName = parts[0];
+                if (!subfolders.has(subfolderName)) {
+                    subfolders.set(subfolderName, []);
+                }
+                subfolders.get(subfolderName)!.push(playbook);
+            }
+        }
+
+        // Add subfolders first (sorted)
+        const sortedFolders = Array.from(subfolders.keys()).sort();
+        for (const folderName of sortedFolders) {
+            nodes.push(new FolderNode(
+                folderName,
+                path.join(folderPath, folderName),
+                workspaceFolder
+            ));
+        }
+
+        // Add playbooks (sorted by name)
+        const sortedPlaybooks = directPlaybooks.sort((a, b) => 
+            path.basename(a.path).localeCompare(path.basename(b.path))
+        );
+        for (const playbook of sortedPlaybooks) {
+            nodes.push(new PlaybookNode(playbook));
+        }
+
+        return nodes;
     }
 }

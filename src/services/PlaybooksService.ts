@@ -127,35 +127,44 @@ export class PlaybooksService {
     }
 
     private async _discoverPlaybooks(): Promise<void> {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!workspaceRoot) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
             return;
         }
 
         this._playbooks.clear();
 
-        // Find all yml/yaml files, excluding dot directories
-        const pattern = new vscode.RelativePattern(workspaceRoot, '**/*.{yml,yaml}');
-        const files = await vscode.workspace.findFiles(pattern, '**/.*/**');
+        // Scan all workspace folders
+        for (const folder of workspaceFolders) {
+            const workspaceRoot = folder.uri.fsPath;
+            
+            // Find all yml/yaml files, excluding dot directories
+            const pattern = new vscode.RelativePattern(folder, '**/*.{yml,yaml}');
+            const files = await vscode.workspace.findFiles(pattern, '**/.*/**');
 
-        for (const file of files) {
-            try {
-                const content = await fs.promises.readFile(file.fsPath, 'utf-8');
-                const plays = this._parsePlaybook(content);
-                
-                if (plays.length > 0) {
-                    const relativePath = path.relative(workspaceRoot, file.fsPath);
-                    const name = path.basename(file.fsPath, path.extname(file.fsPath));
+            for (const file of files) {
+                try {
+                    const content = await fs.promises.readFile(file.fsPath, 'utf-8');
+                    const plays = this._parsePlaybook(content);
                     
-                    this._playbooks.set(relativePath, {
-                        name,
-                        path: file.fsPath,
-                        relativePath,
-                        plays,
-                    });
+                    if (plays.length > 0) {
+                        const relativePath = path.relative(workspaceRoot, file.fsPath);
+                        // For multi-root, prefix with folder name to avoid collisions
+                        const displayPath = workspaceFolders.length > 1 
+                            ? `${folder.name}/${relativePath}` 
+                            : relativePath;
+                        const name = path.basename(file.fsPath, path.extname(file.fsPath));
+                        
+                        this._playbooks.set(displayPath, {
+                            name,
+                            path: file.fsPath,
+                            relativePath: displayPath,
+                            plays,
+                        });
+                    }
+                } catch (error) {
+                    // Skip files that can't be read
                 }
-            } catch (error) {
-                // Skip files that can't be read
             }
         }
     }
@@ -307,8 +316,7 @@ export class PlaybooksService {
             return globalConfig;
         }
 
-        const configName = this._getConfigFileName(relativePath);
-        const configPath = path.join(configDir, PLAYBOOKS_CONFIG_DIR, configName);
+        const configPath = this._getPlaybookConfigPath(configDir, relativePath);
         
         try {
             if (fs.existsSync(configPath)) {
@@ -326,8 +334,13 @@ export class PlaybooksService {
         const configDir = this._getConfigDir();
         if (!configDir) {return;}
 
-        const configName = this._getConfigFileName(relativePath);
-        const configPath = path.join(configDir, PLAYBOOKS_CONFIG_DIR, configName);
+        const configPath = this._getPlaybookConfigPath(configDir, relativePath);
+        
+        // Ensure the directory exists (for nested paths)
+        const configDirPath = path.dirname(configPath);
+        if (!fs.existsSync(configDirPath)) {
+            fs.mkdirSync(configDirPath, { recursive: true });
+        }
         
         try {
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -337,9 +350,10 @@ export class PlaybooksService {
         }
     }
 
-    private _getConfigFileName(relativePath: string): string {
-        // Convert path to safe filename
-        return relativePath.replace(/[/\\]/g, '_').replace(/\.ya?ml$/, '') + '.json';
+    private _getPlaybookConfigPath(configDir: string, relativePath: string): string {
+        // Preserve directory hierarchy: deploy/app.yml → playbooks/deploy/app.json
+        const configRelPath = relativePath.replace(/\.ya?ml$/, '') + '.json';
+        return path.join(configDir, PLAYBOOKS_CONFIG_DIR, configRelPath);
     }
 
     public buildCommand(playbookPath: string, config: PlaybookConfig): string {
@@ -474,15 +488,22 @@ export class PlaybooksService {
     }
 
     public generateAiPrompt(playbook: PlaybookInfo): string {
-        return `Please analyze the Ansible playbook at "${playbook.relativePath}" and provide a hierarchical summary:
+        return `Please analyze the Ansible playbook at "${playbook.relativePath}" and provide a comprehensive summary.
 
+## Instructions:
 1. Read the playbook file
 2. Follow all imports (import_playbook, include_playbook)
 3. Examine all roles used (check roles/ directory and requirements.yml)
 4. List all tasks in order of execution
 5. Identify any variables, handlers, and templates used
+6. **Catalog all collections and plugins used** - note every fully-qualified collection name (FQCN) referenced in the playbook (e.g., ansible.builtin.copy, community.general.ufw)
 
-Provide the summary in this format:
+## Required Output (in this order):
+
+### Executive Summary
+Provide a 1-2 paragraph summary explaining what this playbook accomplishes at a high level. Describe the purpose, the systems it targets, and the end result after successful execution. Write this for someone who needs to quickly understand what running this playbook will do.
+
+### Hierarchical Structure
 - Playbook: ${playbook.name}
   - Play 1: [name] (hosts: [hosts])
     - Pre-tasks: [list]
@@ -492,6 +513,22 @@ Provide the summary in this format:
     - Post-tasks: [list]
   - Play 2: ...
 
-Also note any external dependencies (collections, roles from Galaxy, etc.)`;
+### Collections Used
+List all collections referenced in the playbook with their FQCNs.
+
+### Other Dependencies
+Note any additional external dependencies (Galaxy roles, required variables, inventory requirements, etc.)
+
+---
+
+## Final Step: Collection Audit (Do this LAST)
+**Important: Complete all sections above before this step.**
+
+1. Use the \`list_collections\` MCP tool to check which collections are currently installed
+2. Compare the installed collections against those required by the playbook
+3. Note any version requirements from collections/requirements.yml if present
+4. **End your response by asking the user** if they would like to install any missing collections using the \`install_collection\` MCP tool
+
+This prompt should be the final thing in your response so the user can easily respond with their choice.`;
     }
 }

@@ -110,6 +110,13 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(playbooksView);
 
+    // Refresh playbooks when workspace folders change
+    const workspaceFoldersListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        log('Workspace folders changed, refreshing playbooks...');
+        playbooksProvider.refresh();
+    });
+    context.subscriptions.push(workspaceFoldersListener);
+
     // Register the MCP Tools view
     const mcpToolsProvider = new McpToolsProvider(context);
     const mcpToolsView = vscode.window.createTreeView('ansibleMcpTools', {
