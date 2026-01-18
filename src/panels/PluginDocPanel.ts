@@ -15,11 +15,12 @@ function toArray(value: string | string[] | undefined): string[] {
 }
 
 export class PluginDocPanel {
-    public static currentPanel: PluginDocPanel | undefined;
+    private static _panels: Map<string, PluginDocPanel> = new Map();
     public static readonly viewType = 'pluginDocPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
+    private readonly _pluginKey: string;
     private _disposables: vscode.Disposable[] = [];
 
     public static async show(
@@ -27,32 +28,67 @@ export class PluginDocPanel {
         pluginFullName: string,
         pluginType: string
     ) {
-        const column = vscode.ViewColumn.One;
-
-        // Close existing panel if showing different plugin
-        if (PluginDocPanel.currentPanel) {
-            PluginDocPanel.currentPanel._panel.dispose();
+        const pluginKey = `${pluginFullName}:${pluginType}`;
+        
+        // If panel for this plugin already exists, reveal it
+        const existingPanel = PluginDocPanel._panels.get(pluginKey);
+        if (existingPanel) {
+            existingPanel._panel.reveal();
+            return;
         }
 
+        // Create new panel in a new tab
         const panel = vscode.window.createWebviewPanel(
             PluginDocPanel.viewType,
             `${pluginFullName}`,
-            column,
+            vscode.ViewColumn.Active,
             {
                 enableScripts: true,
-                localResourceRoots: [extensionUri]
+                localResourceRoots: [extensionUri],
+                retainContextWhenHidden: true
             }
         );
 
-        PluginDocPanel.currentPanel = new PluginDocPanel(panel, extensionUri);
-        await PluginDocPanel.currentPanel._loadPluginDoc(pluginFullName, pluginType);
+        const docPanel = new PluginDocPanel(panel, extensionUri, pluginKey);
+        PluginDocPanel._panels.set(pluginKey, docPanel);
+        await docPanel._loadPluginDoc(pluginFullName, pluginType);
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, pluginKey: string) {
         this._panel = panel;
         this._extensionUri = extensionUri;
+        this._pluginKey = pluginKey;
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+        
+        // Handle messages from the webview
+        this._panel.webview.onDidReceiveMessage(
+            async (message) => {
+                if (message.type === 'aiPrompt') {
+                    // Show info message with the copied prompt
+                    vscode.window.showInformationMessage(
+                        'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                        'Open Chat'
+                    ).then(selection => {
+                        if (selection === 'Open Chat') {
+                            // Try to open the chat panel
+                            vscode.commands.executeCommand('workbench.action.chat.open');
+                        }
+                    });
+                } else if (message.type === 'updateSettings') {
+                    // Save settings to workspace configuration
+                    const config = vscode.workspace.getConfiguration('ansibleEnvironments');
+                    if (message.zoom !== undefined) {
+                        await config.update('pluginDocZoom', message.zoom, vscode.ConfigurationTarget.Workspace);
+                    }
+                    if (message.theme !== undefined) {
+                        await config.update('pluginDocTheme', message.theme, vscode.ConfigurationTarget.Workspace);
+                    }
+                }
+            },
+            null,
+            this._disposables
+        );
     }
 
     private async _loadPluginDoc(pluginFullName: string, pluginType: string) {
@@ -67,7 +103,20 @@ export class PluginDocPanel {
                 return;
             }
 
-            this._panel.webview.html = this._getDocHtml(pluginFullName, pluginType, pluginData);
+            // Get settings
+            const config = vscode.workspace.getConfiguration('ansibleEnvironments');
+            const zoom = config.get<number>('pluginDocZoom', 100);
+            const themeSetting = config.get<string>('pluginDocTheme', 'auto');
+            
+            // Resolve 'auto' to actual theme based on VS Code's current theme
+            const vscodeThemeKind = vscode.window.activeColorTheme.kind;
+            const isVsCodeLight = vscodeThemeKind === vscode.ColorThemeKind.Light || 
+                                  vscodeThemeKind === vscode.ColorThemeKind.HighContrastLight;
+            const resolvedTheme = themeSetting === 'auto' 
+                ? (isVsCodeLight ? 'light' : 'dark')
+                : themeSetting;
+
+            this._panel.webview.html = this._getDocHtml(pluginFullName, pluginType, pluginData, zoom, themeSetting, resolvedTheme);
         } catch (error) {
             this._panel.webview.html = this._getErrorHtml(`Failed to load documentation: ${error}`);
         }
@@ -138,7 +187,7 @@ export class PluginDocPanel {
 </html>`;
     }
 
-    private _getDocHtml(pluginFullName: string, pluginType: string, data: PluginData): string {
+    private _getDocHtml(pluginFullName: string, pluginType: string, data: PluginData, initialZoom: number = 100, themeSetting: string = 'auto', resolvedTheme: string = 'dark'): string {
         const doc = data.doc!;
         const parts = pluginFullName.split('.');
         const namespace = parts[0];
@@ -146,13 +195,14 @@ export class PluginDocPanel {
         const pluginName = parts.slice(2).join('.');
 
         return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="${resolvedTheme}" data-theme-setting="${themeSetting}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${pluginFullName}</title>
     <style>
-        :root {
+        /* Dark theme (default) */
+        :root, [data-theme="dark"] {
             --bg: #0d0d0d;
             --surface: #161616;
             --surface-light: #1e1e1e;
@@ -164,6 +214,35 @@ export class PluginDocPanel {
             --code-bg: #0a0a0a;
             --required: #e57373;
             --success: #81c784;
+            /* YAML syntax - dark */
+            --yaml-key: #9cdcfe;
+            --yaml-string: #ce9178;
+            --yaml-number: #b5cea8;
+            --yaml-bool: #569cd6;
+            --yaml-comment: #6a9955;
+            --yaml-anchor: #c586c0;
+        }
+        
+        /* Light theme */
+        [data-theme="light"] {
+            --bg: #ffffff;
+            --surface: #f5f5f5;
+            --surface-light: #e8e8e8;
+            --border: #ddd;
+            --text: #1a1a1a;
+            --text-muted: #555;
+            --text-dim: #777;
+            --accent: #000;
+            --code-bg: #f8f8f8;
+            --required: #c62828;
+            --success: #2e7d32;
+            /* YAML syntax - light (higher contrast) */
+            --yaml-key: #0451a5;
+            --yaml-string: #a31515;
+            --yaml-number: #098658;
+            --yaml-bool: #0000ff;
+            --yaml-comment: #008000;
+            --yaml-anchor: #800080;
         }
         
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -447,17 +526,17 @@ export class PluginDocPanel {
         }
         
         /* YAML Syntax Highlighting */
-        .yaml-key { color: #9cdcfe; }
-        .yaml-string { color: #ce9178; }
-        .yaml-number { color: #b5cea8; }
-        .yaml-bool { color: #569cd6; }
-        .yaml-null { color: #569cd6; }
-        .yaml-comment { color: #6a9955; font-style: italic; }
-        .yaml-comment-dim { color: #666; font-style: italic; }
-        .yaml-comment-type { color: #569cd6; font-style: italic; }
-        .yaml-comment-required { color: #e57373; font-style: italic; }
-        .yaml-comment-optional { color: #666; font-style: italic; }
-        .yaml-list-marker { color: #d4d4d4; }
+        .yaml-key { color: var(--yaml-key); }
+        .yaml-string { color: var(--yaml-string); }
+        .yaml-number { color: var(--yaml-number); }
+        .yaml-bool { color: var(--yaml-bool); }
+        .yaml-null { color: var(--yaml-bool); }
+        .yaml-comment { color: var(--yaml-comment); font-style: italic; }
+        .yaml-comment-dim { color: var(--text-dim); font-style: italic; }
+        .yaml-comment-type { color: var(--yaml-bool); font-style: italic; }
+        .yaml-comment-required { color: var(--required); font-style: italic; }
+        .yaml-comment-optional { color: var(--text-dim); font-style: italic; }
+        .yaml-list-marker { color: var(--text-muted); }
         
         /* Examples view toggle */
         .examples-toolbar {
@@ -554,6 +633,61 @@ export class PluginDocPanel {
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         
+        /* Toolbar */
+        .toolbar {
+            position: fixed;
+            top: 12px;
+            right: 20px;
+            display: flex;
+            gap: 4px;
+            z-index: 100;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+        }
+        .toolbar-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .toolbar-btn:hover {
+            background: var(--surface-light);
+            color: var(--text);
+        }
+        .toolbar-btn.ai-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            width: auto;
+            padding: 0 10px;
+        }
+        .toolbar-btn.ai-btn:hover {
+            opacity: 0.9;
+        }
+        .toolbar-divider {
+            width: 1px;
+            background: var(--border);
+            margin: 4px 2px;
+        }
+        .zoom-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            padding: 0 4px;
+        }
+        
         /* Inline code */
         code {
             background: var(--code-bg);
@@ -569,6 +703,16 @@ export class PluginDocPanel {
     </style>
 </head>
 <body>
+    <div class="toolbar">
+        <button class="toolbar-btn" id="zoom-out-btn" title="Zoom out">−</button>
+        <span class="zoom-label" id="zoom-level">${initialZoom}%</span>
+        <button class="toolbar-btn" id="zoom-in-btn" title="Zoom in">+</button>
+        <div class="toolbar-divider"></div>
+        <button class="toolbar-btn" id="theme-btn" title="Toggle theme">${themeSetting}</button>
+        <div class="toolbar-divider"></div>
+        <button class="toolbar-btn ai-btn" id="ai-prompt-btn" title="Generate AI prompt for task builder">✨AI</button>
+    </div>
+    
     <div class="container">
         <div class="breadcrumb">
             <span>${namespace}</span>
@@ -804,6 +948,112 @@ export class PluginDocPanel {
         
         // Initialize sample view
         switchSampleView('optional');
+        
+        // VS Code API for messaging
+        const vscode = acquireVsCodeApi();
+        
+        // Zoom functionality
+        (function() {
+            let currentZoom = ${initialZoom};
+            const minZoom = 50;
+            const maxZoom = 200;
+            const zoomStep = 10;
+            
+            const zoomInBtn = document.getElementById('zoom-in-btn');
+            const zoomOutBtn = document.getElementById('zoom-out-btn');
+            const zoomLevel = document.getElementById('zoom-level');
+            const mainContent = document.querySelector('.container');
+            
+            // Apply initial zoom
+            if (mainContent && currentZoom !== 100) {
+                mainContent.style.zoom = (currentZoom / 100);
+            }
+            
+            function updateZoom(save = true) {
+                if (mainContent) {
+                    mainContent.style.zoom = (currentZoom / 100);
+                }
+                if (zoomLevel) zoomLevel.textContent = currentZoom + '%';
+                if (save) {
+                    vscode.postMessage({ type: 'updateSettings', zoom: currentZoom });
+                }
+            }
+            
+            if (zoomInBtn) {
+                zoomInBtn.onclick = function() {
+                    if (currentZoom < maxZoom) {
+                        currentZoom += zoomStep;
+                        updateZoom();
+                    }
+                };
+            }
+            
+            if (zoomOutBtn) {
+                zoomOutBtn.onclick = function() {
+                    if (currentZoom > minZoom) {
+                        currentZoom -= zoomStep;
+                        updateZoom();
+                    }
+                };
+            }
+        })();
+        
+        // Theme toggle functionality
+        (function() {
+            const themes = ['auto', 'light', 'dark'];
+            let currentThemeSetting = '${themeSetting}';
+            
+            const themeBtn = document.getElementById('theme-btn');
+            
+            function updateThemeButton() {
+                if (themeBtn) {
+                    themeBtn.textContent = currentThemeSetting;
+                    themeBtn.title = 'Theme: ' + currentThemeSetting + ' (click to cycle)';
+                }
+            }
+            
+            if (themeBtn) {
+                themeBtn.onclick = function() {
+                    const currentIndex = themes.indexOf(currentThemeSetting);
+                    currentThemeSetting = themes[(currentIndex + 1) % themes.length];
+                    
+                    // For auto, we can't resolve here without VS Code - just toggle between light/dark
+                    // The next reload will properly resolve 'auto'
+                    const displayTheme = currentThemeSetting === 'auto' ? 'dark' : currentThemeSetting;
+                    document.documentElement.setAttribute('data-theme', displayTheme);
+                    document.documentElement.setAttribute('data-theme-setting', currentThemeSetting);
+                    
+                    updateThemeButton();
+                    vscode.postMessage({ type: 'updateSettings', theme: currentThemeSetting });
+                };
+            }
+        })();
+        
+        // AI prompt generation
+        const pluginFullName = "${pluginFullName}";
+        const pluginType = "${pluginType}";
+        
+        document.getElementById('ai-prompt-btn').addEventListener('click', function() {
+            const prompt = \`Help me create an Ansible task using the \${pluginFullName} \${pluginType}, guiding me through the required and optional parameters. Use the build_ansible_task MCP tool to accomplish this.\`;
+            
+            // Copy to clipboard
+            const btn = this;
+            const originalText = btn.innerHTML;
+            navigator.clipboard.writeText(prompt).then(() => {
+                btn.innerHTML = '✓';
+                btn.style.background = 'var(--success)';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            });
+            
+            // Also send message to extension to open chat
+            vscode.postMessage({
+                type: 'aiPrompt',
+                prompt: prompt
+            });
+        });
     </script>
 </body>
 </html>`;
@@ -1485,7 +1735,7 @@ ${this._escapeHtml(section.afterState)}</div>`;
     }
 
     public dispose() {
-        PluginDocPanel.currentPanel = undefined;
+        PluginDocPanel._panels.delete(this._pluginKey);
         this._panel.dispose();
         while (this._disposables.length) {
             const x = this._disposables.pop();

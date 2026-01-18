@@ -10,6 +10,7 @@ import { STATIC_TOOLS, McpToolDefinition } from '../mcp/tools';
 import { CreatorToolGenerator } from '../mcp/creatorTools';
 import { CreatorService } from '../services';
 import { log } from '../extension';
+import { getMcpStatus, McpStatus } from '../mcp/cursorConfig';
 
 type ToolCategory = 'discovery' | 'generation' | 'execution' | 'devtools' | 'creator';
 
@@ -42,14 +43,19 @@ class ToolCategoryNode extends vscode.TreeItem {
 }
 
 class ToolNode extends vscode.TreeItem {
+    public readonly sortKey: string;
+    
     constructor(
         public readonly toolInfo: ToolInfo
     ) {
-        super(toolInfo.tool.name, vscode.TreeItemCollapsibleState.None);
+        // Use the first line of description as the label
+        const firstLine = toolInfo.tool.description.split('\n')[0].trim();
+        const label = firstLine.length > 60 ? firstLine.substring(0, 57) + '...' : firstLine;
+        super(label, vscode.TreeItemCollapsibleState.None);
         
-        // Show first line of description
-        const firstLine = toolInfo.tool.description.split('\n')[0];
-        this.description = firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
+        // Store lowercase for sorting
+        this.sortKey = firstLine.toLowerCase();
+        
         this.tooltip = new vscode.MarkdownString(this._formatTooltip());
         this.contextValue = 'mcpTool';
         this.iconPath = new vscode.ThemeIcon('symbol-method');
@@ -92,7 +98,23 @@ class ToolNode extends vscode.TreeItem {
     }
 }
 
-type ToolTreeItem = ToolCategoryNode | ToolNode;
+class McpWarningNode extends vscode.TreeItem {
+    constructor(status: McpStatus) {
+        const ideName = status.ide === 'cursor' ? 'Cursor' : 'VS Code Copilot';
+        super(`MCP not configured for ${ideName}`, vscode.TreeItemCollapsibleState.None);
+        
+        this.description = 'click to configure';
+        this.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+        this.tooltip = `AI tools require MCP to be configured.\n\nClick to configure for ${ideName}.`;
+        this.contextValue = 'mcpWarning';
+        this.command = {
+            command: 'ansibleMcpTools.configure',
+            title: 'Configure MCP'
+        };
+    }
+}
+
+type ToolTreeItem = ToolCategoryNode | ToolNode | McpWarningNode;
 
 export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<ToolTreeItem | undefined | null | void>();
@@ -102,8 +124,10 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
     private _creatorToolGenerator: CreatorToolGenerator;
     private _isLoading = false;
     private _creatorServiceListener: vscode.Disposable | undefined;
+    private _extensionContext: vscode.ExtensionContext;
 
-    constructor() {
+    constructor(context: vscode.ExtensionContext) {
+        this._extensionContext = context;
         this._creatorToolGenerator = new CreatorToolGenerator();
         
         // Listen for CreatorService changes to auto-refresh when schema loads
@@ -184,44 +208,43 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
 
     private _generateExamplePrompt(tool: McpToolDefinition): string {
         const name = tool.name;
-        const required = tool.inputSchema.required || [];
-        const props = tool.inputSchema.properties;
 
-        // Build example based on tool type
+        // Format: "Do the specific task, use the TOOL_NAME MCP tool to accomplish this"
         switch (name) {
             case 'search_ansible_plugins':
-                return 'Search for Ansible plugins to copy files';
+                return `Search for Ansible plugins that can copy files, use the ${name} MCP tool to accomplish this`;
             case 'get_plugin_documentation':
-                return 'Show me the documentation for ansible.builtin.copy';
+                return `Show me the documentation for ansible.builtin.copy, use the ${name} MCP tool to accomplish this`;
             case 'list_ansible_collections':
-                return 'What Ansible collections are installed?';
+                return `List what Ansible collections are installed, use the ${name} MCP tool to accomplish this`;
             case 'generate_ansible_task':
-                return 'Generate an Ansible task to copy /etc/hosts to /tmp/hosts.backup';
+                return `Generate an Ansible task to copy /etc/hosts to /tmp/hosts.backup, use the ${name} MCP tool to accomplish this`;
             case 'build_ansible_task':
-                return 'Help me build an Ansible task for the apt module step by step';
+                return `Help me build an Ansible task for the apt module step by step, use the ${name} MCP tool to accomplish this`;
             case 'generate_ansible_playbook':
-                return 'Create a playbook to install and configure nginx on webservers';
+                return `Create a playbook to install and configure nginx on webservers, use the ${name} MCP tool to accomplish this`;
             case 'list_execution_environments':
-                return 'What execution environments are available?';
+                return `List what execution environments are available, use the ${name} MCP tool to accomplish this`;
             case 'get_ee_details':
-                return 'Show me the details of the creator-ee execution environment';
+                return `Show me the details of the creator-ee execution environment, use the ${name} MCP tool to accomplish this`;
             case 'list_ansible_dev_tools':
-                return 'What ansible-dev-tools packages are installed?';
+                return `List what ansible-dev-tools packages are installed, use the ${name} MCP tool to accomplish this`;
             default:
-                // For creator tools and others
-                if (name.startsWith('creator_')) {
-                    const parts = name.replace('creator_', '').split('_');
-                    return `Use ansible-creator to ${parts.join(' ')}`;
+                // For creator tools (ac_*), extract action from the description
+                if (name.startsWith('ac_')) {
+                    // Get the first line of the description (the main help text)
+                    const firstLine = tool.description.split('\n')[0].trim();
+                    // Remove trailing period if present
+                    const action = firstLine.endsWith('.') ? firstLine.slice(0, -1) : firstLine;
+                    return `${action}, use the ${name} MCP tool to accomplish this`;
                 }
-                // Generic: mention required params
-                if (required.length > 0) {
-                    const paramHints = required.map(p => {
-                        const desc = (props[p] as { description?: string })?.description || p;
-                        return desc.split(' ').slice(0, 3).join(' ');
-                    }).join(', ');
-                    return `Use ${name} with ${paramHints}`;
+                // Generic fallback with description
+                const desc = tool.description.split('\n')[0].trim();
+                if (desc && desc.length > 10) {
+                    const action = desc.endsWith('.') ? desc.slice(0, -1) : desc;
+                    return `${action}, use the ${name} MCP tool to accomplish this`;
                 }
-                return `Use the ${name} tool`;
+                return `Run the ${name.replace(/_/g, ' ')} command, use the ${name} MCP tool to accomplish this`;
         }
     }
 
@@ -231,7 +254,15 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
 
     async getChildren(element?: ToolTreeItem): Promise<ToolTreeItem[]> {
         if (!element) {
-            // Root level - return categories
+            const items: ToolTreeItem[] = [];
+            
+            // Check MCP status and show warning if not configured
+            const status = getMcpStatus(this._extensionContext);
+            if (!status.isConfigured) {
+                items.push(new McpWarningNode(status));
+            }
+            
+            // Show tool categories
             const categories: { id: ToolCategory; label: string }[] = [
                 { id: 'discovery', label: 'Discovery' },
                 { id: 'generation', label: 'Task Generation' },
@@ -240,19 +271,25 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
                 { id: 'creator', label: 'Creator' }
             ];
 
-            return categories
+            const categoryNodes = categories
                 .map(cat => {
                     const count = this._tools.filter(t => t.category === cat.id).length;
                     return new ToolCategoryNode(cat.label, cat.id, count);
                 })
-                .filter(node => node.toolCount > 0); // Only show non-empty categories
+                .filter(node => node.toolCount > 0);
+            
+            items.push(...categoryNodes);
+            return items;
         }
 
         if (element instanceof ToolCategoryNode) {
-            // Return tools in this category
-            return this._tools
+            // Return tools in this category, sorted by description
+            const nodes = this._tools
                 .filter(t => t.category === element.categoryId)
                 .map(t => new ToolNode(t));
+            // Sort alphabetically by description
+            nodes.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+            return nodes;
         }
 
         return [];
@@ -306,7 +343,7 @@ export async function injectToolPromptIntoChat(toolInfo: ToolInfo): Promise<void
         // Fallback: copy to clipboard and notify user
         await vscode.env.clipboard.writeText(prompt);
         vscode.window.showInformationMessage(
-            `Prompt copied to clipboard: "${prompt}"`,
+            'AI prompt copied to clipboard. Paste it into an agent chat session.',
             'Paste in Chat'
         );
         return;
@@ -328,7 +365,7 @@ export async function injectToolPromptIntoChat(toolInfo: ToolInfo): Promise<void
             log(`McpToolsProvider: Inserted prompt via paste`);
         } catch {
             vscode.window.showInformationMessage(
-                `Prompt copied to clipboard: "${prompt}"`,
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
                 'Paste in Chat'
             );
         }

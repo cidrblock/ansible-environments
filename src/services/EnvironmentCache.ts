@@ -27,8 +27,8 @@ interface CacheFile {
     selectedEnvironment?: CachedEnvironment;
 }
 
-const CACHE_DIR = '.cache';
-const CACHE_FILE = 'ansible-environments.json';
+const CACHE_DIR = '.cache/ansible-environments';
+const CACHE_FILE = 'environment.json';
 
 /**
  * Get the workspace root directory

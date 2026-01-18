@@ -250,7 +250,7 @@ export class CreatorFormPanel {
         
         .section {
             margin-bottom: 24px;
-            background: var(--vscode-editor-inactiveSelectionBackground);
+            background: rgba(128, 128, 128, 0.08);
             border: 1px solid var(--border);
             border-radius: 6px;
             padding: 16px;

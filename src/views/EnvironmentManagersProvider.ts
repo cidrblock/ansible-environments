@@ -24,6 +24,7 @@ export class EnvironmentManagersProvider implements vscode.TreeDataProvider<Tree
     private _managers: Map<string, PythonEnvironment[]> = new Map();
     private _envListener: vscode.Disposable | undefined;
     private _currentEnvId: string | undefined;
+    private _currentEnvManagerId: string | undefined;
 
     constructor() {
         this._initPythonEnvApi();
@@ -73,6 +74,7 @@ export class EnvironmentManagersProvider implements vscode.TreeDataProvider<Tree
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
             const currentEnv = await this._pythonEnvApi.getEnvironment(workspaceFolder);
             this._currentEnvId = currentEnv?.envId.id;
+            this._currentEnvManagerId = currentEnv?.envId.managerId;
 
             // Get all environments
             const environments = await this._pythonEnvApi.getEnvironments('all');
@@ -115,35 +117,70 @@ export class EnvironmentManagersProvider implements vscode.TreeDataProvider<Tree
         return name === 'venv';
     }
 
+    private _isGlobalManager(managerId: string): boolean {
+        const name = managerId.split(':').pop()?.toLowerCase() || '';
+        return name === 'system';
+    }
+
     getTreeItem(element: TreeNode): vscode.TreeItem {
         if (element.type === 'manager') {
             // venv should be expanded, others (like Global) should be collapsed
             const isVenv = this._isVenvManager(element.id);
+            const isGlobal = this._isGlobalManager(element.id);
+            // Check if a global environment is currently selected
+            const isGlobalEnvSelected = this._currentEnvManagerId && this._isGlobalManager(this._currentEnvManagerId);
+            
             const item = new vscode.TreeItem(
                 element.name,
                 isVenv ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
             );
-            item.iconPath = new vscode.ThemeIcon(element.name === 'Global' ? 'globe' : 'folder');
+            
+            if (isGlobal && isGlobalEnvSelected) {
+                // Show warning only when a global env is selected
+                item.iconPath = new vscode.ThemeIcon('globe', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+                const tooltip = new vscode.MarkdownString(
+                    '$(warning) **Global Python Environment Selected**\n\n' +
+                    'Use of global Python environments for Ansible development is strongly discouraged.\n\n' +
+                    'Please create and select a virtual environment instead.'
+                );
+                tooltip.supportThemeIcons = true;
+                item.tooltip = tooltip;
+                item.description = '⚠️ not recommended';
+            } else if (isGlobal) {
+                item.iconPath = new vscode.ThemeIcon('globe');
+            } else {
+                item.iconPath = new vscode.ThemeIcon('folder');
+            }
             item.contextValue = 'envManager';
             return item;
         } else {
             const env = element.environment;
             const isCurrent = env.envId.id === this._currentEnvId;
+            const isGlobalEnv = this._isGlobalManager(element.managerId);
             
             const item = new vscode.TreeItem(
                 env.displayName || env.name,
                 vscode.TreeItemCollapsibleState.None
             );
             // Use checkmark icon for current environment
-            item.iconPath = isCurrent 
-                ? new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'))
-                : new vscode.ThemeIcon('symbol-misc');
+            if (isCurrent) {
+                item.iconPath = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
+            } else if (isGlobalEnv) {
+                item.iconPath = new vscode.ThemeIcon('symbol-misc', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+            } else {
+                item.iconPath = new vscode.ThemeIcon('symbol-misc');
+            }
             item.contextValue = isCurrent ? 'pythonEnvironmentCurrent' : 'pythonEnvironment';
-            item.tooltip = new vscode.MarkdownString(
-                `**${env.displayName}**\n\n` +
-                `Version: ${env.version}\n\n` +
-                `Path: ${env.sysPrefix || env.displayPath}`
-            );
+            
+            const tooltip = new vscode.MarkdownString();
+            tooltip.supportThemeIcons = true;
+            if (isGlobalEnv) {
+                tooltip.appendMarkdown('$(warning) **Not recommended for Ansible development**\n\n');
+            }
+            tooltip.appendMarkdown(`**${env.displayName}**\n\n`);
+            tooltip.appendMarkdown(`Version: ${env.version}\n\n`);
+            tooltip.appendMarkdown(`Path: ${env.sysPrefix || env.displayPath}`);
+            item.tooltip = tooltip;
             
             // Command to select this environment
             item.command = {

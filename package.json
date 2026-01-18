@@ -61,7 +61,7 @@
         },
         {
           "id": "ansibleMcpTools",
-          "name": "MCP Tools",
+          "name": "✨ AI Tools",
           "type": "tree"
         }
       ]
@@ -109,6 +109,11 @@
         "icon": "$(database)"
       },
       {
+        "command": "ansibleDevToolsCollections.search",
+        "title": "Search Plugins",
+        "icon": "$(search)"
+      },
+      {
         "command": "ansibleDevToolsPackages.install",
         "title": "Install ansible-dev-tools",
         "icon": "$(cloud-download)"
@@ -153,6 +158,11 @@
         "command": "ansibleMcpTools.copyPrompt",
         "title": "Copy Prompt",
         "icon": "$(clippy)"
+      },
+      {
+        "command": "ansibleMcpTools.configure",
+        "title": "Configure MCP",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -183,19 +193,24 @@
           "group": "navigation@3"
         },
         {
-          "command": "ansibleDevToolsCollections.install",
+          "command": "ansibleDevToolsCollections.search",
           "when": "view == ansibleDevToolsCollections",
           "group": "navigation@1"
         },
         {
-          "command": "ansibleDevToolsCollections.refresh",
+          "command": "ansibleDevToolsCollections.install",
           "when": "view == ansibleDevToolsCollections",
           "group": "navigation@2"
         },
         {
-          "command": "ansibleDevToolsCollections.refreshGalaxyCache",
+          "command": "ansibleDevToolsCollections.refresh",
           "when": "view == ansibleDevToolsCollections",
           "group": "navigation@3"
+        },
+        {
+          "command": "ansibleDevToolsCollections.refreshGalaxyCache",
+          "when": "view == ansibleDevToolsCollections",
+          "group": "navigation@4"
         },
         {
           "command": "ansibleExecutionEnvironments.refresh",
@@ -220,6 +235,29 @@
           "group": "inline"
         }
       ]
+    },
+    "configuration": {
+      "title": "Ansible Environments",
+      "properties": {
+        "ansibleEnvironments.pluginDocZoom": {
+          "type": "number",
+          "default": 100,
+          "minimum": 50,
+          "maximum": 200,
+          "description": "Zoom level for plugin documentation view (50-200%)"
+        },
+        "ansibleEnvironments.pluginDocTheme": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "light", "dark"],
+          "enumDescriptions": [
+            "Follow VS Code theme",
+            "Always use light theme",
+            "Always use dark theme"
+          ],
+          "description": "Theme for plugin documentation view"
+        }
+      }
     }
   },
   "scripts": {

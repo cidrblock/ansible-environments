@@ -2,7 +2,32 @@ import * as vscode from 'vscode';
 import { CreatorService, SchemaNode } from '../services/CreatorService';
 import { log } from '../extension';
 
-type TreeNode = CategoryNode | CommandNode;
+type TreeNode = CategoryNode | CommandNode | MessageNode;
+
+class MessageNode extends vscode.TreeItem {
+    constructor(
+        label: string,
+        options?: {
+            description?: string;
+            tooltip?: string;
+            icon?: string;
+            command?: vscode.Command;
+        }
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'creatorMessage';
+        if (options?.description) {
+            this.description = options.description;
+        }
+        if (options?.tooltip) {
+            this.tooltip = options.tooltip;
+        }
+        this.iconPath = new vscode.ThemeIcon(options?.icon || 'info');
+        if (options?.command) {
+            this.command = options.command;
+        }
+    }
+}
 
 class CategoryNode extends vscode.TreeItem {
     constructor(
@@ -83,12 +108,23 @@ export class CreatorProvider implements vscode.TreeDataProvider<TreeNode> {
         if (!element) {
             // Root level - show Init and Add categories
             if (this._service.isLoading()) {
-                return [new CommandNode('Loading...', { name: 'loading' }, [])];
+                return [new MessageNode('Loading...', { icon: 'sync~spin' })];
             }
 
             const schema = this._service.getSchema();
             if (!schema) {
-                return [new CommandNode('Schema not loaded', { name: 'error' }, [])];
+                // Check if ansible-creator is not installed
+                return [
+                    new MessageNode('ansible-creator not found', {
+                        description: 'Click to install',
+                        tooltip: 'Install ansible-dev-tools to enable Creator features',
+                        icon: 'warning',
+                        command: {
+                            command: 'ansibleDevToolsPackages.install',
+                            title: 'Install ansible-dev-tools'
+                        }
+                    })
+                ];
             }
 
             const children: TreeNode[] = [];

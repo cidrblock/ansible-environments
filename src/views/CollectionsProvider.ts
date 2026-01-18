@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CollectionsService, CollectionInfo, PluginInfo, CollectionData } from '../services/CollectionsService';
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import { log } from '../extension';
 
 type TreeNode = CollectionNode | PluginTypeNode | PluginNode | LoadingNode;
 
@@ -47,6 +48,13 @@ export class CollectionsProvider implements vscode.TreeDataProvider<TreeNode> {
             this._onDidChangeTreeData.fire();
         });
         
+        // Trigger immediate refresh (will load from cache if available)
+        log('CollectionsProvider: Triggering initial refresh');
+        this.refresh().catch(err => {
+            log(`CollectionsProvider: Initial refresh failed: ${err}`);
+        });
+        
+        // Also initialize Python env API for environment change listening
         this._initPythonEnvApi();
     }
 
@@ -66,11 +74,11 @@ export class CollectionsProvider implements vscode.TreeDataProvider<TreeNode> {
                     });
                 }
                 
-                // Initial load
-                await this.refresh();
+                // Note: Initial refresh is done in constructor (loads from cache)
+                // The service will do background refresh to update data
             }
         } catch (error) {
-            console.error('Failed to get Python Environments API:', error);
+            log(`CollectionsProvider: Failed to get Python Environments API: ${error}`);
         }
     }
 
@@ -109,6 +117,9 @@ export class CollectionsProvider implements vscode.TreeDataProvider<TreeNode> {
             if (element.info.description) {
                 tooltipParts.push(`\n\n${element.info.description}`);
             }
+            if (element.info.path) {
+                tooltipParts.push(`\n\n---\n\nPath: \`${element.info.path}\``);
+            }
             item.tooltip = new vscode.MarkdownString(tooltipParts.join(''));
             
             return item;
@@ -146,14 +157,18 @@ export class CollectionsProvider implements vscode.TreeDataProvider<TreeNode> {
 
     getChildren(element?: TreeNode): Thenable<TreeNode[]> {
         if (!element) {
-            // Show loading indicator when indexing
-            if (this._service.isLoading()) {
+            // Show loading indicator when indexing or not yet loaded
+            if (this._service.isLoading() || !this._service.isLoaded()) {
+                log(`CollectionsProvider: getChildren - loading=${this._service.isLoading()}, loaded=${this._service.isLoaded()}`);
                 return Promise.resolve([{ type: 'loading' } as LoadingNode]);
             }
             
             // Root level - return collections sorted alphabetically
             const collections: CollectionNode[] = [];
-            for (const [name, data] of this._service.getCollections()) {
+            const serviceCollections = this._service.getCollections();
+            log(`CollectionsProvider: getChildren - service has ${serviceCollections.size} collections`);
+            
+            for (const [name, data] of serviceCollections) {
                 collections.push({
                     type: 'collection',
                     name,

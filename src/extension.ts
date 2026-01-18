@@ -9,12 +9,12 @@ import { CreatorProvider } from './views/CreatorProvider';
 import { CreatorFormPanel } from './panels/CreatorFormPanel';
 import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
 import { GalaxyCollectionCache } from './services/GalaxyCollectionCache';
-import { CollectionsService } from './services/CollectionsService';
+import { CollectionsService, setLogFunction as setCollectionsLogFunction } from './services/CollectionsService';
 import { DevToolsService } from './services/DevToolsService';
 import { ExecutionEnvService } from './services/ExecutionEnvService';
 import { CreatorService } from './services/CreatorService';
 import { PythonEnvironment, PythonEnvironmentApi } from './types/pythonEnvApi';
-import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus } from './mcp';
+import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
 import { cacheSelectedEnvironment } from './services/EnvironmentCache';
 
 // Create output channel for extension logs
@@ -28,8 +28,22 @@ export function log(message: string) {
 
 export function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true); // Show the output channel on activation
+    
+    // Inject log function into services
+    setCollectionsLogFunction(log);
+    
     log('Ansible Environments extension is now active');
     console.log('Ansible Environments extension is now active');
+
+    // Helper to update MCP status context
+    const updateMcpStatusContext = () => {
+        const status = getMcpStatus(context);
+        vscode.commands.executeCommand('setContext', 'ansibleMcp.configured', status.isConfigured);
+        log(`MCP Status: IDE=${status.ide}, configured=${status.isConfigured}`);
+    };
+    
+    // Set initial MCP status context
+    updateMcpStatusContext();
 
     // Register MCP server provider for VS Code Copilot integration
     if (isMcpAvailable()) {
@@ -86,7 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(creatorView);
 
     // Register the MCP Tools view
-    const mcpToolsProvider = new McpToolsProvider();
+    const mcpToolsProvider = new McpToolsProvider(context);
     const mcpToolsView = vscode.window.createTreeView('ansibleMcpTools', {
         treeDataProvider: mcpToolsProvider,
         showCollapseAll: true
@@ -190,6 +204,26 @@ export function activate(context: vscode.ExtensionContext) {
                 const api = pythonEnvExtension.exports;
                 const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
 
+                // Check if this is a global/system environment
+                const isGlobalEnv = environment.envId?.managerId?.toLowerCase().includes('system');
+                
+                if (isGlobalEnv) {
+                    const selection = await vscode.window.showWarningMessage(
+                        'Use of global Python environments for Ansible development is strongly discouraged. Please create and select a virtual environment instead.',
+                        'Create Virtual Environment',
+                        'Use Anyway'
+                    );
+                    
+                    if (selection === 'Create Virtual Environment') {
+                        // Trigger the create environment command
+                        vscode.commands.executeCommand('ansibleDevToolsEnvManagers.create');
+                        return;
+                    } else if (selection !== 'Use Anyway') {
+                        // User cancelled
+                        return;
+                    }
+                }
+
                 await api.setEnvironment(workspaceFolder, environment);
                 vscode.window.showInformationMessage(`Selected environment: ${environment.displayName}`);
                 
@@ -213,6 +247,80 @@ export function activate(context: vscode.ExtensionContext) {
         'ansibleDevToolsCollections.refresh',
         () => {
             collectionsProvider.refresh();
+        }
+    );
+
+    // Register Collections search command
+    interface PluginQuickPickItem extends vscode.QuickPickItem {
+        fullName: string;
+        pluginType: string;
+    }
+    
+    const collectionsSearchCommand = vscode.commands.registerCommand(
+        'ansibleDevToolsCollections.search',
+        async () => {
+            const collectionsService = CollectionsService.getInstance();
+            
+            // Get all plugins from all collections
+            const allPlugins: PluginQuickPickItem[] = [];
+            
+            for (const [, data] of collectionsService.getCollections()) {
+                for (const [pluginType, plugins] of data.pluginTypes) {
+                    for (const plugin of plugins) {
+                        allPlugins.push({
+                            label: plugin.fullName,
+                            description: `(${pluginType})`,
+                            detail: plugin.shortDescription,
+                            fullName: plugin.fullName,
+                            pluginType: pluginType
+                        });
+                    }
+                }
+            }
+            
+            // Sort alphabetically
+            allPlugins.sort((a, b) => a.label.localeCompare(b.label));
+            
+            const quickPick = vscode.window.createQuickPick<PluginQuickPickItem>();
+            quickPick.title = 'Search Plugins';
+            quickPick.placeholder = 'Type to search... (e.g., "interface" or "module:config")';
+            quickPick.matchOnDescription = true;
+            quickPick.matchOnDetail = true;
+            quickPick.items = allPlugins;
+            
+            quickPick.onDidChangeValue(value => {
+                // Support typed search: "module:name" or "filter:name"
+                const typeMatch = value.match(/^(\w+):(.*)$/);
+                if (typeMatch) {
+                    const [, pluginType, query] = typeMatch;
+                    const lowerQuery = query.toLowerCase();
+                    const lowerType = pluginType.toLowerCase();
+                    quickPick.items = allPlugins.filter(p => 
+                        p.pluginType.toLowerCase() === lowerType &&
+                        (p.label.toLowerCase().includes(lowerQuery) || 
+                         (p.detail?.toLowerCase().includes(lowerQuery) ?? false))
+                    );
+                } else {
+                    // Regular search - let QuickPick handle matching
+                    quickPick.items = allPlugins;
+                }
+            });
+            
+            quickPick.onDidAccept(() => {
+                const selected = quickPick.selectedItems[0];
+                if (selected) {
+                    quickPick.hide();
+                    // Open plugin documentation
+                    vscode.commands.executeCommand(
+                        'ansibleDevTools.showPluginDoc',
+                        selected.fullName,
+                        selected.pluginType
+                    );
+                }
+            });
+            
+            quickPick.onDidHide(() => quickPick.dispose());
+            quickPick.show();
         }
     );
 
@@ -270,10 +378,20 @@ export function activate(context: vscode.ExtensionContext) {
         async (node) => {
             if (node && node.toolInfo) {
                 await vscode.env.clipboard.writeText(node.toolInfo.examplePrompt);
-                vscode.window.showInformationMessage(`Prompt copied: "${node.toolInfo.examplePrompt}"`);
+                vscode.window.showInformationMessage('AI prompt copied to clipboard. Paste it into an agent chat session.');
             }
         }
     );
+
+    const mcpToolsConfigureCommand = vscode.commands.registerCommand(
+        'ansibleMcpTools.configure',
+        async () => {
+            await configureCursorMcp(context);
+            updateMcpStatusContext();
+            mcpToolsProvider.refresh();
+        }
+    );
+
 
     // Register Galaxy cache refresh command
     const galaxyCacheRefreshCommand = vscode.commands.registerCommand(
@@ -357,12 +475,28 @@ export function activate(context: vscode.ExtensionContext) {
                     
                     const collectionName = selected.label;
                     
-                    try {
-                        await collectionsService.installCollection(collectionName);
-                        vscode.window.showInformationMessage(`Installing collection ${collectionName}...`);
-                    } catch (error) {
-                        vscode.window.showErrorMessage(`Failed to install collection: ${error}`);
-                    }
+                    // Run installation with progress indicator
+                    vscode.window.withProgress(
+                        {
+                            location: vscode.ProgressLocation.Notification,
+                            title: `Installing ${collectionName}`,
+                            cancellable: false
+                        },
+                        async (progress) => {
+                            progress.report({ message: 'Running ade install...' });
+                            
+                            try {
+                                const output = await collectionsService.installCollection(collectionName);
+                                vscode.window.showInformationMessage(`Successfully installed ${collectionName}`);
+                                log(`Collection install output: ${output}`);
+                                
+                                // Refresh the collections view
+                                collectionsProvider.refresh();
+                            } catch (error) {
+                                vscode.window.showErrorMessage(`Failed to install collection: ${error}`);
+                            }
+                        }
+                    );
                 });
 
                 quickPick.onDidHide(() => {
@@ -394,6 +528,7 @@ export function activate(context: vscode.ExtensionContext) {
         envManagersCreateCommand,
         selectEnvCommand,
         collectionsRefreshCommand,
+        collectionsSearchCommand,
         collectionsInstallCommand,
         showPluginDocCommand,
         eeRefreshCommand,
@@ -404,7 +539,8 @@ export function activate(context: vscode.ExtensionContext) {
         showMcpStatusCommand,
         mcpToolsRefreshCommand,
         mcpToolsUseInChatCommand,
-        mcpToolsCopyPromptCommand
+        mcpToolsCopyPromptCommand,
+        mcpToolsConfigureCommand
     );
 
     // Check if Python Environments extension is available and set up environment caching

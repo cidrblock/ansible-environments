@@ -255,3 +255,93 @@ export async function showCursorMcpStatus(context: vscode.ExtensionContext): Pro
 
     panel.webview.html = htmlContent;
 }
+
+/**
+ * Detected IDE type
+ */
+export type IdeType = 'cursor' | 'vscode' | 'unknown';
+
+/**
+ * Detect which IDE we're running in
+ */
+export function detectIde(): IdeType {
+    const appName = vscode.env.appName.toLowerCase();
+    if (appName.includes('cursor')) {
+        return 'cursor';
+    }
+    if (appName.includes('visual studio code') || appName.includes('vscode')) {
+        return 'vscode';
+    }
+    return 'unknown';
+}
+
+/**
+ * MCP configuration status
+ */
+export interface McpStatus {
+    ide: IdeType;
+    vscodeAvailable: boolean;  // VS Code MCP API is available (1.99+)
+    cursorGlobalConfigured: boolean;
+    cursorWorkspaceConfigured: boolean;
+    serverExists: boolean;
+    isConfigured: boolean;  // Overall: is MCP configured for the current IDE?
+}
+
+/**
+ * Get the current MCP configuration status
+ */
+export function getMcpStatus(context: vscode.ExtensionContext): McpStatus {
+    const serverPath = context.asAbsolutePath(path.join('out', 'mcp', 'server.js'));
+    const globalConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceConfigPath = workspaceFolder 
+        ? path.join(workspaceFolder.uri.fsPath, '.cursor', 'mcp.json')
+        : null;
+
+    const ide = detectIde();
+    const serverExists = fs.existsSync(serverPath);
+    
+    // Check VS Code MCP API availability
+    const vscodeAvailable = typeof (vscode as unknown as { lm?: { registerTool?: unknown } }).lm?.registerTool === 'function';
+    
+    // Check Cursor global config
+    let cursorGlobalConfigured = false;
+    if (fs.existsSync(globalConfigPath)) {
+        try {
+            const content = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
+            const configured = content.mcpServers?.['ansible-environments'];
+            cursorGlobalConfigured = configured && configured.args?.[0] === serverPath;
+        } catch {
+            // Invalid JSON
+        }
+    }
+    
+    // Check Cursor workspace config
+    let cursorWorkspaceConfigured = false;
+    if (workspaceConfigPath && fs.existsSync(workspaceConfigPath)) {
+        try {
+            const content = JSON.parse(fs.readFileSync(workspaceConfigPath, 'utf8'));
+            const configured = content.mcpServers?.['ansible-environments'];
+            cursorWorkspaceConfigured = configured && configured.args?.[0] === serverPath;
+        } catch {
+            // Invalid JSON
+        }
+    }
+    
+    // Determine if configured for current IDE
+    let isConfigured = false;
+    if (ide === 'vscode') {
+        isConfigured = vscodeAvailable;
+    } else if (ide === 'cursor') {
+        isConfigured = cursorGlobalConfigured || cursorWorkspaceConfigured;
+    }
+    
+    return {
+        ide,
+        vscodeAvailable,
+        cursorGlobalConfigured,
+        cursorWorkspaceConfigured,
+        serverExists,
+        isConfigured
+    };
+}

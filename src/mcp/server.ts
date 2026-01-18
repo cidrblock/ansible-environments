@@ -22,6 +22,13 @@
  * }
  */
 
+// IMPORTANT: Redirect console.log to stderr before any imports
+// MCP uses stdout for JSON protocol - any console.log corrupts it
+const originalLog = console.log;
+console.log = (...args: unknown[]) => {
+    console.error(...args);
+};
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {

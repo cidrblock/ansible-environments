@@ -2,7 +2,32 @@ import * as vscode from 'vscode';
 import { ExecutionEnvService, ExecutionEnvironment, EEDetails } from '../services/ExecutionEnvService';
 import { log } from '../extension';
 
-type TreeNode = EENode | EEDetailCategoryNode | EEDetailItemNode;
+type TreeNode = EENode | EEDetailCategoryNode | EEDetailItemNode | MessageNode;
+
+class MessageNode extends vscode.TreeItem {
+    constructor(
+        label: string,
+        options?: {
+            description?: string;
+            tooltip?: string;
+            icon?: string;
+            command?: vscode.Command;
+        }
+    ) {
+        super(label, vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'eeMessage';
+        if (options?.description) {
+            this.description = options.description;
+        }
+        if (options?.tooltip) {
+            this.tooltip = options.tooltip;
+        }
+        this.iconPath = new vscode.ThemeIcon(options?.icon || 'info');
+        if (options?.command) {
+            this.command = options.command;
+        }
+    }
+}
 
 class EENode extends vscode.TreeItem {
     constructor(
@@ -110,20 +135,44 @@ export class ExecutionEnvironmentsProvider implements vscode.TreeDataProvider<Tr
 
     private async _getExecutionEnvironments(): Promise<TreeNode[]> {
         if (this._service.isLoading()) {
-            return [new EEDetailItemNode('$(sync~spin) Loading...', '', 'Loading execution environments')];
+            return [new MessageNode('Loading...', { icon: 'sync~spin', tooltip: 'Loading execution environments' })];
         }
 
         try {
             const ees = await this._service.loadExecutionEnvironments();
 
             if (ees.length === 0) {
-                return [new EEDetailItemNode('No execution environments found', '', 'Build or pull an execution environment image')];
+                return [new MessageNode('No execution environments found', {
+                    description: 'Build or pull an EE image',
+                    icon: 'info',
+                    tooltip: 'Build or pull an execution environment image'
+                })];
             }
 
             return ees.map(ee => new EENode(ee));
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            return [new EEDetailItemNode('Error loading execution environments', '', message)];
+            
+            // Check if ansible-navigator is not installed
+            if (message.includes('not found in PATH') || message.includes('not found')) {
+                return [
+                    new MessageNode('ansible-navigator not found', {
+                        description: 'Click to install',
+                        tooltip: 'Install ansible-dev-tools to enable Execution Environments',
+                        icon: 'warning',
+                        command: {
+                            command: 'ansibleDevToolsPackages.install',
+                            title: 'Install ansible-dev-tools'
+                        }
+                    })
+                ];
+            }
+            
+            return [new MessageNode('Error loading execution environments', {
+                description: message,
+                icon: 'error',
+                tooltip: message
+            })];
         }
     }
 

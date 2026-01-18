@@ -12,4 +12,4 @@ export { TaskBuilder, TaskBuilderInput, TaskBuilderResult } from './taskBuilder'
 export { CreatorToolGenerator } from './creatorTools';
 export { McpToolHandler } from './handlers';
 export { registerMcpServerProvider, isMcpAvailable } from './vscodeProvider';
-export { configureCursorMcp, showCursorMcpStatus } from './cursorConfig';
+export { configureCursorMcp, showCursorMcpStatus, getMcpStatus, McpStatus, detectIde, IdeType } from './cursorConfig';
