@@ -58,7 +58,7 @@ class ToolNode extends vscode.TreeItem {
         
         this.tooltip = new vscode.MarkdownString(this._formatTooltip());
         this.contextValue = 'mcpTool';
-        this.iconPath = new vscode.ThemeIcon('symbol-method');
+        this.iconPath = new vscode.ThemeIcon('sparkle');
         
         // Command to inject prompt into chat
         this.command = {

@@ -710,7 +710,7 @@ export class PluginDocPanel {
         <div class="toolbar-divider"></div>
         <button class="toolbar-btn" id="theme-btn" title="Toggle theme">${themeSetting}</button>
         <div class="toolbar-divider"></div>
-        <button class="toolbar-btn ai-btn" id="ai-prompt-btn" title="Generate AI prompt for task builder">✨AI</button>
+        <button class="toolbar-btn ai-btn" id="ai-prompt-btn" title="Generate AI prompt for task builder">AI</button>
     </div>
     
     <div class="container">

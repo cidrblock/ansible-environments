@@ -12,6 +12,7 @@ import { CreatorToolGenerator } from './creatorTools';
 import { CollectionsService, PluginOption } from '../services/CollectionsService';
 import { DevToolsService } from '../services/DevToolsService';
 import { ExecutionEnvService } from '../services/ExecutionEnvService';
+import { CreatorService } from '../services/CreatorService';
 
 // Helper to convert string | string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -73,6 +74,10 @@ export class McpToolHandler {
                 // Dev tools
                 case 'list_ansible_dev_tools':
                     return this._handleListDevTools();
+
+                // Creator
+                case 'get_ansible_creator_schema':
+                    return this._handleGetCreatorSchema();
 
                 default:
                     return {
@@ -621,6 +626,71 @@ export class McpToolHandler {
             content: [{
                 type: 'text',
                 text: `Ansible Dev Tools Packages:\n\n${formatted}`
+            }]
+        };
+    }
+
+    // === Creator Handlers ===
+
+    private async _handleGetCreatorSchema(): Promise<McpToolResult> {
+        const service = CreatorService.getInstance();
+
+        if (!service.isLoaded()) {
+            await service.refresh();
+        }
+
+        const schema = service.getSchema();
+
+        if (!schema) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: 'ansible-creator is not available.\n\nInstall with: pip install ansible-dev-tools'
+                }],
+                isError: true
+            };
+        }
+
+        // Format the schema into a readable summary
+        const formatNode = (node: any, indent: string = ''): string => {
+            const lines: string[] = [];
+            
+            if (node.name) {
+                lines.push(`${indent}**${node.name}**`);
+            }
+            if (node.description) {
+                lines.push(`${indent}  ${node.description}`);
+            }
+            
+            if (node.parameters?.properties) {
+                const required = node.parameters.required || [];
+                const props = Object.entries(node.parameters.properties);
+                if (props.length > 0) {
+                    lines.push(`${indent}  Parameters:`);
+                    for (const [name, prop] of props) {
+                        const p = prop as any;
+                        const req = required.includes(name) ? ' (required)' : '';
+                        lines.push(`${indent}    - ${name}${req}: ${p.description || p.type || ''}`);
+                    }
+                }
+            }
+            
+            if (node.subcommands) {
+                for (const [subName, subNode] of Object.entries(node.subcommands)) {
+                    lines.push('');
+                    lines.push(formatNode(subNode, indent + '  '));
+                }
+            }
+            
+            return lines.join('\n');
+        };
+
+        const formatted = formatNode(schema);
+
+        return {
+            content: [{
+                type: 'text',
+                text: `# ansible-creator Schema\n\nThis tool can scaffold the following Ansible content:\n\n${formatted}`
             }]
         };
     }

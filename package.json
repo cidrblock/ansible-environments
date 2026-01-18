@@ -66,7 +66,7 @@
         },
         {
           "id": "ansibleMcpTools",
-          "name": "✨ AI Tools",
+          "name": "AI Tools",
           "type": "tree"
         }
       ]
@@ -119,6 +119,21 @@
         "icon": "$(search)"
       },
       {
+        "command": "ansibleDevToolsCollections.aiSummary",
+        "title": "AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleDevToolsCollections.aiCollectionSummary",
+        "title": "Generate AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleDevToolsCollections.aiPluginSummary",
+        "title": "Generate AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "ansibleDevToolsPackages.install",
         "title": "Install ansible-dev-tools",
         "icon": "$(cloud-download)"
@@ -134,9 +149,29 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "ansibleExecutionEnvironments.aiSummary",
+        "title": "AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleExecutionEnvironments.aiEESummary",
+        "title": "Generate AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
         "command": "ansibleCreator.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleCreator.aiSummary",
+        "title": "AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleCreator.aiEntrySummary",
+        "title": "Generate with AI",
+        "icon": "$(sparkle)"
       },
       {
         "command": "ansibleCreator.openForm",
@@ -162,7 +197,7 @@
       {
         "command": "ansibleMcpTools.copyPrompt",
         "title": "Copy Prompt",
-        "icon": "$(clippy)"
+        "icon": "$(sparkle)"
       },
       {
         "command": "ansibleMcpTools.configure",
@@ -252,14 +287,29 @@
           "group": "navigation@4"
         },
         {
+          "command": "ansibleDevToolsCollections.aiSummary",
+          "when": "view == ansibleDevToolsCollections",
+          "group": "navigation@5"
+        },
+        {
+          "command": "ansibleExecutionEnvironments.aiSummary",
+          "when": "view == ansibleExecutionEnvironments",
+          "group": "navigation@1"
+        },
+        {
           "command": "ansibleExecutionEnvironments.refresh",
           "when": "view == ansibleExecutionEnvironments",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleCreator.aiSummary",
+          "when": "view == ansibleCreator",
           "group": "navigation@1"
         },
         {
           "command": "ansibleCreator.refresh",
           "when": "view == ansibleCreator",
-          "group": "navigation@1"
+          "group": "navigation@2"
         },
         {
           "command": "ansibleMcpTools.refresh",
@@ -278,6 +328,26 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "ansibleDevToolsCollections.aiCollectionSummary",
+          "when": "view == ansibleDevToolsCollections && viewItem == collection",
+          "group": "inline"
+        },
+        {
+          "command": "ansibleDevToolsCollections.aiPluginSummary",
+          "when": "view == ansibleDevToolsCollections && viewItem == plugin",
+          "group": "inline"
+        },
+        {
+          "command": "ansibleExecutionEnvironments.aiEESummary",
+          "when": "view == ansibleExecutionEnvironments && viewItem == executionEnvironment",
+          "group": "inline"
+        },
+        {
+          "command": "ansibleCreator.aiEntrySummary",
+          "when": "view == ansibleCreator && viewItem == creatorCommand",
+          "group": "inline"
+        },
         {
           "command": "ansiblePlaybooks.run",
           "when": "view == ansiblePlaybooks && viewItem == playbook",

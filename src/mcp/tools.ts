@@ -374,6 +374,17 @@ export const LIST_DEV_TOOLS_TOOL: McpToolDefinition = {
     }
 };
 
+// === Creator ===
+
+export const GET_CREATOR_SCHEMA_TOOL: McpToolDefinition = {
+    name: 'get_ansible_creator_schema',
+    description: 'Get the full ansible-creator command schema showing all available scaffolding commands and their parameters. Use this to understand what content types can be created (collections, playbooks, plugins, etc.) and what options are available for each.',
+    inputSchema: {
+        type: 'object',
+        properties: {}
+    }
+};
+
 // === Collection of all static tools ===
 
 export const STATIC_TOOLS: McpToolDefinition[] = [
@@ -395,4 +406,7 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     
     // Dev tools
     LIST_DEV_TOOLS_TOOL,
+    
+    // Creator
+    GET_CREATOR_SCHEMA_TOOL,
 ];

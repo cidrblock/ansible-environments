@@ -350,6 +350,177 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    // AI Summary Commands - Collections
+    const collectionsAiSummaryCommand = vscode.commands.registerCommand(
+        'ansibleDevToolsCollections.aiSummary',
+        async () => {
+            const prompt = `Generate a summary of the installed Ansible collections in this workspace.
+
+Use the \`list_collections\` MCP tool to get the list of installed collections, then provide:
+1. A brief overview of the collection categories (networking, cloud, system, etc.)
+2. Key capabilities provided by these collections
+3. Any recommendations for commonly paired collections that might be missing`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    const collectionsAiCollectionSummaryCommand = vscode.commands.registerCommand(
+        'ansibleDevToolsCollections.aiCollectionSummary',
+        async (node: { name: string }) => {
+            if (!node?.name) {return;}
+            const prompt = `Generate a summary of the Ansible collection "${node.name}".
+
+Use the \`list_plugins\` MCP tool with collection="${node.name}" to get all plugins in this collection, then provide:
+1. A brief description of what this collection is for
+2. The key modules, plugins, and roles it provides
+3. Common use cases and example scenarios
+4. Any dependencies or requirements`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    const collectionsAiPluginSummaryCommand = vscode.commands.registerCommand(
+        'ansibleDevToolsCollections.aiPluginSummary',
+        async (node: { fullName: string; pluginType: string }) => {
+            if (!node?.fullName) {return;}
+            const prompt = `Explain the Ansible ${node.pluginType} plugin "${node.fullName}".
+
+Use the \`get_plugin_documentation\` MCP tool with plugin_name="${node.fullName}" and plugin_type="${node.pluginType}" to get the full documentation, then provide:
+1. What this plugin does in plain language
+2. The most important parameters and when to use them
+3. A practical example task showing common usage
+4. Any gotchas or best practices`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    // AI Summary Commands - Execution Environments
+    const eeAiSummaryCommand = vscode.commands.registerCommand(
+        'ansibleExecutionEnvironments.aiSummary',
+        async () => {
+            const prompt = `Generate a summary of the available Ansible Execution Environments.
+
+Use the \`list_execution_environments\` MCP tool to get the list of available EEs, then provide:
+1. An overview of each execution environment and its purpose
+2. Key tools and collections included in each
+3. Recommendations for which EE to use for different scenarios`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    const eeAiEESummaryCommand = vscode.commands.registerCommand(
+        'ansibleExecutionEnvironments.aiEESummary',
+        async (node: { label: string }) => {
+            if (!node?.label) {return;}
+            const prompt = `Generate a detailed summary of the Ansible Execution Environment "${node.label}".
+
+Provide information about:
+1. The container image and its base
+2. Python packages installed and their versions
+3. Ansible collections included
+4. System tools and utilities available
+5. Best use cases for this execution environment`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    // AI Summary Commands - Creator
+    const creatorAiSummaryCommand = vscode.commands.registerCommand(
+        'ansibleCreator.aiSummary',
+        async () => {
+            const prompt = `Explain the ansible-creator scaffolding tool and summarize its capabilities.
+
+Use the \`get_ansible_creator_schema\` MCP tool to get the full schema, then provide:
+1. What ansible-creator is and why it's useful
+2. A summary of each content type it can scaffold (collections, playbooks, plugins, etc.)
+3. The key parameters for each scaffolding command
+4. Best practices for starting new Ansible projects
+5. How the generated structure follows Ansible best practices`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
+    const creatorAiEntrySummaryCommand = vscode.commands.registerCommand(
+        'ansibleCreator.aiEntrySummary',
+        async (node: { label: string; schema: { description?: string }; commandPath: string[] }) => {
+            if (!node?.commandPath) {return;}
+            const commandStr = `ansible-creator ${node.commandPath.join(' ')}`;
+            const prompt = `Help me use the "${commandStr}" command to scaffold new Ansible content.
+
+${node.schema?.description ? `This command: ${node.schema.description}` : ''}
+
+Please:
+1. Explain what this command creates and the resulting directory structure
+2. Walk me through the required and optional parameters
+3. Suggest best practices for the values I should provide
+4. After I provide the details, help me run the command`;
+            
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    );
+
     // Register Creator commands
     const creatorRefreshCommand = vscode.commands.registerCommand(
         'ansibleCreator.refresh',
@@ -662,11 +833,18 @@ export function activate(context: vscode.ExtensionContext) {
         collectionsRefreshCommand,
         collectionsSearchCommand,
         collectionsInstallCommand,
+        collectionsAiSummaryCommand,
+        collectionsAiCollectionSummaryCommand,
+        collectionsAiPluginSummaryCommand,
         showPluginDocCommand,
         eeRefreshCommand,
+        eeAiSummaryCommand,
+        eeAiEESummaryCommand,
         galaxyCacheRefreshCommand,
         creatorRefreshCommand,
         creatorOpenFormCommand,
+        creatorAiSummaryCommand,
+        creatorAiEntrySummaryCommand,
         playbooksRefreshCommand,
         playbooksEditConfigCommand,
         playbooksEditDefaultsCommand,
