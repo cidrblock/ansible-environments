@@ -9,6 +9,7 @@ import { CreatorProvider } from './views/CreatorProvider';
 import { CreatorFormPanel } from './panels/CreatorFormPanel';
 import { PlaybooksProvider } from './views/PlaybooksProvider';
 import { PlaybookConfigPanel } from './panels/PlaybookConfigPanel';
+import { PlaybookProgressPanel } from './panels/PlaybookProgressPanel';
 import { PlaybooksService, PlaybookInfo, PlaybookPlay } from './services/PlaybooksService';
 import { TerminalService } from './services/TerminalService';
 import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
@@ -615,6 +616,34 @@ Please:
         }
     );
 
+    // Run playbook with progress viewer
+    const playbooksRunWithProgressCommand = vscode.commands.registerCommand(
+        'ansiblePlaybooks.runWithProgress',
+        async (node: { playbook: PlaybookInfo }) => {
+            if (node && node.playbook) {
+                const playbooksService = PlaybooksService.getInstance();
+                const config = playbooksService.getPlaybookConfig(node.playbook.relativePath);
+                
+                // Calculate path relative to the playbook's workspace folder
+                const workspaceFolderPath = node.playbook.workspaceFolder.fsPath;
+                const playbookRelativePath = path.relative(workspaceFolderPath, node.playbook.path);
+                
+                const command = playbooksService.buildCommand(playbookRelativePath, config);
+
+                log(`Running playbook with progress: ${command} in ${workspaceFolderPath}`);
+
+                // Show progress panel
+                await PlaybookProgressPanel.show(context.extensionUri, {
+                    playbookPath: node.playbook.path,
+                    playbookName: node.playbook.name,
+                    workspaceFolder: node.playbook.workspaceFolder,
+                    command: command,
+                    extensionPath: context.extensionPath,
+                });
+            }
+        }
+    );
+
     const playbooksOpenCommand = vscode.commands.registerCommand(
         'ansiblePlaybooks.openPlaybook',
         async (arg: PlaybookInfo | { playbook: PlaybookInfo }) => {
@@ -879,6 +908,7 @@ Please:
         playbooksEditConfigCommand,
         playbooksEditDefaultsCommand,
         playbooksRunCommand,
+        playbooksRunWithProgressCommand,
         playbooksOpenCommand,
         playbooksGoToPlayCommand,
         playbooksAiSummaryCommand,

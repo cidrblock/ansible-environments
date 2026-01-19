@@ -10,7 +10,17 @@ try {
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
 import { findExecutableWithCache } from './EnvironmentCache';
-import { TerminalService } from './TerminalService';
+
+// TerminalService is only available in VS Code context - lazy load to avoid
+// breaking the MCP server which runs standalone
+let TerminalService: typeof import('./TerminalService').TerminalService | undefined;
+if (vscode) {
+    try {
+        TerminalService = require('./TerminalService').TerminalService;
+    } catch {
+        // Running standalone
+    }
+}
 
 /**
  * Schema for a command parameter
@@ -325,7 +335,7 @@ export class CreatorService {
 
         const command = commandParts.join(' ');
 
-        if (vscode) {
+        if (vscode && TerminalService) {
             // VS Code mode - use TerminalService for proper venv handling
             const terminalService = TerminalService.getInstance();
             const managed = await terminalService.createActivatedTerminal({

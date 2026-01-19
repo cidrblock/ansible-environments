@@ -11,7 +11,17 @@ try {
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
 import { findExecutableWithCache } from './EnvironmentCache';
-import { TerminalService } from './TerminalService';
+
+// TerminalService is only available in VS Code context - lazy load to avoid
+// breaking the MCP server which runs standalone
+let TerminalService: typeof import('./TerminalService').TerminalService | undefined;
+if (vscode) {
+    try {
+        TerminalService = require('./TerminalService').TerminalService;
+    } catch {
+        // Running standalone
+    }
+}
 
 /**
  * Information about an installed dev tools package
@@ -203,7 +213,7 @@ export class DevToolsService {
 
         await this.initialize();
 
-        if (!vscode) {
+        if (!vscode || !TerminalService) {
             throw new Error('This operation requires VS Code');
         }
 

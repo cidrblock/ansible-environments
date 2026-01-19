@@ -239,6 +239,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "ansiblePlaybooks.runWithProgress",
+        "title": "Run with Progress Viewer",
+        "icon": "$(graph)"
+      },
+      {
         "command": "ansiblePlaybooks.openPlaybook",
         "title": "Edit Playbook",
         "icon": "$(edit)"
@@ -378,19 +383,24 @@
           "group": "inline@1"
         },
         {
-          "command": "ansiblePlaybooks.openPlaybook",
+          "command": "ansiblePlaybooks.runWithProgress",
           "when": "view == ansiblePlaybooks && viewItem == playbook",
           "group": "inline@2"
         },
         {
-          "command": "ansiblePlaybooks.editConfig",
+          "command": "ansiblePlaybooks.openPlaybook",
           "when": "view == ansiblePlaybooks && viewItem == playbook",
           "group": "inline@3"
         },
         {
+          "command": "ansiblePlaybooks.editConfig",
+          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "group": "inline@4"
+        },
+        {
           "command": "ansiblePlaybooks.aiSummary",
           "when": "view == ansiblePlaybooks && viewItem == playbook && config.ansibleEnvironments.enableAiFeatures",
-          "group": "inline@4"
+          "group": "inline@5"
         },
         {
           "command": "ansibleMcpTools.copyPrompt",
