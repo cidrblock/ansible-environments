@@ -37,7 +37,10 @@ function getWorkspaceRoot(): string | null {
     if (vscode?.workspace.workspaceFolders?.[0]) {
         return vscode.workspace.workspaceFolders[0].uri.fsPath;
     }
-    // Standalone: use current working directory
+    // Standalone (MCP server): use ANSIBLE_ENV_WORKSPACE env var, or fall back to cwd
+    if (process.env.ANSIBLE_ENV_WORKSPACE) {
+        return process.env.ANSIBLE_ENV_WORKSPACE;
+    }
     return process.cwd();
 }
 

@@ -450,12 +450,19 @@ Use the \`list_execution_environments\` MCP tool to get the list of available EE
             if (!node?.label) {return;}
             const prompt = `Generate a detailed summary of the Ansible Execution Environment "${node.label}".
 
-Provide information about:
-1. The container image and its base
-2. Python packages installed and their versions
-3. Ansible collections included
-4. System tools and utilities available
-5. Best use cases for this execution environment`;
+Use the \`get_ee_details\` MCP tool with ee_name="${node.label}" to get all information about this EE.
+
+The tool returns complete details including:
+- Container base OS and Ansible version
+- ALL installed Python packages with versions
+- ALL installed Ansible collections with versions
+- System packages (if available)
+
+Based on the tool output, provide:
+1. A summary of the container image and its base OS
+2. Key Python packages and what they enable
+3. Notable Ansible collections included and their use cases
+4. Best use cases for this execution environment`;
             
             await vscode.env.clipboard.writeText(prompt);
             vscode.window.showInformationMessage(
@@ -499,15 +506,23 @@ Use the \`get_ansible_creator_schema\` MCP tool to get the full schema, then pro
         async (node: { label: string; schema: { description?: string }; commandPath: string[] }) => {
             if (!node?.commandPath) {return;}
             const commandStr = `ansible-creator ${node.commandPath.join(' ')}`;
+            // Build the tool name from the command path (e.g., ['add', 'plugin', 'filter'] -> 'ac_add_plug_filter')
+            const toolName = `ac_${node.commandPath.map((p: string) => {
+                const abbr: Record<string, string> = { 'resource': 'res', 'execution_environment': 'ee', 'execution-environment': 'ee', 'devcontainer': 'devc', 'devfile': 'devf', 'collection': 'coll', 'plugin': 'plug', 'project': 'proj', 'playbook': 'play' };
+                return abbr[p] || p;
+            }).join('_')}`;
+            
             const prompt = `Help me use the "${commandStr}" command to scaffold new Ansible content.
 
 ${node.schema?.description ? `This command: ${node.schema.description}` : ''}
+
+Use the \`${toolName}\` MCP tool to execute this command once I provide the required parameters.
 
 Please:
 1. Explain what this command creates and the resulting directory structure
 2. Walk me through the required and optional parameters
 3. Suggest best practices for the values I should provide
-4. After I provide the details, help me run the command`;
+4. After I provide the details, use the \`${toolName}\` tool to run the command`;
             
             await vscode.env.clipboard.writeText(prompt);
             vscode.window.showInformationMessage(
@@ -571,11 +586,12 @@ Please:
             if (node && node.playbook) {
                 const service = PlaybooksService.getInstance();
                 const config = service.getPlaybookConfig(node.playbook.relativePath);
-                const command = service.buildCommand(node.playbook.relativePath, config);
+                const baseCommand = service.buildCommand(node.playbook.relativePath, config);
 
-                log(`Running playbook: ${command}`);
+                log(`Running playbook: ${baseCommand}`);
 
-                // Try to use Python environment terminal
+                // Get Python environment bin directory
+                let venvBinDir: string | null = null;
                 const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>('ms-python.vscode-python-envs');
                 
                 if (pythonEnvExtension) {
@@ -586,25 +602,100 @@ Please:
                     const api = pythonEnvExtension.exports;
                     const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
                     const environment = await api.getEnvironment(workspaceFolder);
-
-                    if (environment) {
-                        const terminal = await api.createTerminal(environment, {
-                            name: `ansible-playbook: ${node.playbook.name}`,
-                            cwd: workspaceFolder,
-                        });
-                        terminal.show();
-                        terminal.sendText(command);
-                        return;
+                    
+                    if (environment?.environmentPath?.fsPath) {
+                        const envPath = environment.environmentPath.fsPath;
+                        venvBinDir = envPath.substring(0, envPath.lastIndexOf('/'));
+                        log(`Found Python environment bin dir: ${venvBinDir}`);
                     }
                 }
 
-                // Fallback to regular terminal
-                const terminal = vscode.window.createTerminal({
-                    name: `ansible-playbook: ${node.playbook.name}`,
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri,
-                });
+                // Fallback: check for .venv in workspace root
+                if (!venvBinDir) {
+                    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                    if (workspaceRoot) {
+                        const defaultBinDir = `${workspaceRoot}/.venv/bin`;
+                        const fs = require('fs');
+                        if (fs.existsSync(`${defaultBinDir}/ansible-playbook`)) {
+                            venvBinDir = defaultBinDir;
+                            log(`Found default .venv bin dir: ${venvBinDir}`);
+                        }
+                    }
+                }
+
+                // Build command using full path to ansible-playbook from venv
+                // This bypasses the need for shell activation entirely
+                let finalCommand: string;
+                if (venvBinDir) {
+                    // Replace "ansible-playbook" with full path
+                    finalCommand = baseCommand.replace(/^ansible-playbook\b/, `"${venvBinDir}/ansible-playbook"`);
+                    log(`Using venv ansible-playbook: ${finalCommand}`);
+                } else {
+                    finalCommand = baseCommand;
+                    log('No venv found, using system ansible-playbook');
+                }
+
+                // Use Python extension's createTerminal which handles venv activation
+                // Then wait for shell integration to indicate readiness before sending command
+                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+                let terminal: vscode.Terminal;
+                let usedPythonEnv = false;
+                
+                if (pythonEnvExtension && pythonEnvExtension.isActive) {
+                    const api = pythonEnvExtension.exports;
+                    const environment = await api.getEnvironment(workspaceFolder);
+                    
+                    if (environment) {
+                        log('Using Python extension terminal with activation');
+                        terminal = await api.createTerminal(environment, {
+                            name: `ansible-playbook: ${node.playbook.name}`,
+                            cwd: workspaceFolder,
+                        });
+                        usedPythonEnv = true;
+                    } else {
+                        terminal = vscode.window.createTerminal({
+                            name: `ansible-playbook: ${node.playbook.name}`,
+                            cwd: workspaceFolder,
+                        });
+                    }
+                } else {
+                    terminal = vscode.window.createTerminal({
+                        name: `ansible-playbook: ${node.playbook.name}`,
+                        cwd: workspaceFolder,
+                    });
+                }
+                
                 terminal.show();
-                terminal.sendText(command);
+                await terminal.processId;
+                
+                // Wait for shell integration to be ready, or use timeout as fallback
+                // Shell integration indicates when the shell prompt is ready
+                const shellIntegration = (terminal as any).shellIntegration;
+                if (shellIntegration) {
+                    log('Waiting for shell integration...');
+                    // Wait for the shell to be ready
+                    await new Promise<void>((resolve) => {
+                        const disposable = shellIntegration.onDidChangeShellIntegration?.(() => {
+                            disposable?.dispose();
+                            resolve();
+                        });
+                        // Fallback timeout
+                        setTimeout(() => {
+                            disposable?.dispose();
+                            resolve();
+                        }, 3000);
+                    });
+                } else {
+                    // No shell integration, wait for Python extension to complete
+                    log('No shell integration, waiting 3s for activation...');
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                }
+                
+                // Use simple command if Python extension activated the venv,
+                // otherwise use the full path we computed earlier
+                const commandToRun = usedPythonEnv ? baseCommand : finalCommand;
+                log(`Sending command: ${commandToRun}`);
+                terminal.sendText(commandToRun);
             }
         }
     );

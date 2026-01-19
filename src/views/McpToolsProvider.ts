@@ -229,6 +229,12 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
                 return `Show me the details of the creator-ee execution environment, use the ${name} MCP tool to accomplish this`;
             case 'list_ansible_dev_tools':
                 return `List what ansible-dev-tools packages are installed, use the ${name} MCP tool to accomplish this`;
+            case 'install_ansible_collection':
+                return `Install the community.general Ansible collection, use the ${name} MCP tool to accomplish this`;
+            case 'get_collection_plugins':
+                return `List all plugins in the cisco.nxos collection, use the ${name} MCP tool to accomplish this`;
+            case 'get_ansible_creator_schema':
+                return `Show me what content types ansible-creator can scaffold, use the ${name} MCP tool to accomplish this`;
             default:
                 // For creator tools (ac_*), extract action from the description
                 if (name.startsWith('ac_')) {

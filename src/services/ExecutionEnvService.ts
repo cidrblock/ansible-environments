@@ -32,6 +32,12 @@ export interface EEDetails {
     ansible_version?: {
         details: string;
     };
+    redhat_release?: {
+        details: string;
+    };
+    system_packages?: {
+        details: Record<string, string>;
+    };
     python_packages?: {
         details: Array<{
             name: string;

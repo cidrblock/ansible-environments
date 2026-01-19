@@ -349,17 +349,12 @@ export class McpToolHandler {
             totalPlugins += plugins.length;
             sections.push(`## ${pluginType}s (${plugins.length})\n`);
 
-            // Show first 20 plugins with descriptions
-            const displayPlugins = plugins.slice(0, 20);
-            for (const plugin of displayPlugins) {
+            // Show ALL plugins with descriptions
+            for (const plugin of plugins) {
                 const desc = plugin.shortDescription 
-                    ? ` - ${plugin.shortDescription.substring(0, 80)}${plugin.shortDescription.length > 80 ? '...' : ''}`
+                    ? ` - ${plugin.shortDescription.substring(0, 100)}${plugin.shortDescription.length > 100 ? '...' : ''}`
                     : '';
                 sections.push(`• **${plugin.name}**${desc}`);
-            }
-
-            if (plugins.length > 20) {
-                sections.push(`  ... and ${plugins.length - 20} more`);
             }
             sections.push('');
         }
@@ -554,39 +549,51 @@ export class McpToolHandler {
             }
 
             const sections: string[] = [];
-            sections.push(`# ${eeName}\n`);
+            sections.push(`# Execution Environment: ${eeName}\n`);
+            sections.push('This is the complete information for this execution environment.\n');
 
             // Info
+            sections.push('## Container Information\n');
             if (details.ansible_version?.details) {
                 sections.push(`**Ansible Version:** ${details.ansible_version.details}`);
             }
             if (details.os_release?.details?.[0]) {
                 const os = details.os_release.details[0];
-                sections.push(`**OS:** ${os['pretty-name'] || os.name || 'Unknown'}`);
+                sections.push(`**Base OS:** ${os['pretty-name'] || os.name || 'Unknown'}`);
+            }
+            if (details.redhat_release?.details) {
+                sections.push(`**Red Hat Release:** ${details.redhat_release.details}`);
+            }
+            if (details.system_packages?.details) {
+                const pkgCount = Object.keys(details.system_packages.details).length;
+                sections.push(`**System Packages:** ${pkgCount} installed`);
             }
             sections.push('');
 
-            // Collections
+            // Ansible Collections - show ALL
             if (details.ansible_collections?.details) {
                 const collections = Object.entries(details.ansible_collections.details)
                     .sort(([a], [b]) => a.localeCompare(b));
                 sections.push(`## Ansible Collections (${collections.length})\n`);
-                sections.push(collections.slice(0, 20).map(([name, version]) => `• ${name}: ${version}`).join('\n'));
-                if (collections.length > 20) {
-                    sections.push(`... and ${collections.length - 20} more`);
-                }
+                sections.push(collections.map(([name, version]) => `• ${name}: ${version}`).join('\n'));
                 sections.push('');
             }
 
-            // Python packages (top 20)
+            // Python packages - show ALL
             if (details.python_packages?.details) {
                 const packages = [...details.python_packages.details]
                     .sort((a, b) => a.name.localeCompare(b.name));
                 sections.push(`## Python Packages (${packages.length})\n`);
-                sections.push(packages.slice(0, 20).map(p => `• ${p.name}: ${p.version}`).join('\n'));
-                if (packages.length > 20) {
-                    sections.push(`... and ${packages.length - 20} more`);
-                }
+                sections.push(packages.map(p => `• ${p.name}: ${p.version}`).join('\n'));
+                sections.push('');
+            }
+
+            // System packages if available
+            if (details.system_packages?.details) {
+                const sysPkgs = Object.entries(details.system_packages.details)
+                    .sort(([a], [b]) => a.localeCompare(b));
+                sections.push(`## System Packages (${sysPkgs.length})\n`);
+                sections.push(sysPkgs.map(([name, version]) => `• ${name}: ${version}`).join('\n'));
             }
 
             return {

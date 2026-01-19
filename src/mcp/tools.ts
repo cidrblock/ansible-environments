@@ -181,6 +181,7 @@ Examples:
             },
             params: {
                 type: 'object',
+                additionalProperties: true,
                 description: 'Plugin parameters as key-value pairs'
             },
             task_name: {
@@ -197,6 +198,7 @@ Examples:
             },
             loop: {
                 type: 'array',
+                items: { type: 'string' },
                 description: 'Items to iterate over'
             },
             become: {
@@ -256,6 +258,7 @@ Sessions timeout after 10 minutes of inactivity.`,
             },
             params: {
                 type: 'object',
+                additionalProperties: true,
                 description: 'Parameters to add to the task'
             },
             task_name: {
@@ -308,7 +311,7 @@ Provide a list of tasks and this tool generates a properly formatted playbook.`,
                     type: 'object',
                     properties: {
                         plugin: { type: 'string' },
-                        params: { type: 'object' },
+                        params: { type: 'object', additionalProperties: true },
                         task_name: { type: 'string' },
                         become: { type: 'boolean' },
                         when: { type: 'string' },
@@ -348,9 +351,15 @@ export const LIST_EE_TOOL: McpToolDefinition = {
 
 export const GET_EE_DETAILS_TOOL: McpToolDefinition = {
     name: 'get_ee_details',
-    description: `Get detailed information about an execution environment.
+    description: `Get COMPLETE detailed information about an Ansible execution environment.
 
-Returns Ansible version, OS, installed collections, and Python packages.`,
+This tool returns ALL information about the EE - no additional container inspection is needed:
+• Container base OS and Ansible version
+• ALL installed Ansible collections with versions
+• ALL installed Python packages with versions  
+• ALL system packages (if available)
+
+Use the ee_name exactly as returned by list_execution_environments.`,
     inputSchema: {
         type: 'object',
         properties: {

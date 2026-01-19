@@ -13,6 +13,7 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "workspaceContains:**/*"
   ],
   "main": "./out/extension.js",
@@ -23,6 +24,12 @@
     "ms-python.vscode-python-envs"
   ],
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "ansibleEnvironments",
+        "label": "Ansible Environments"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
