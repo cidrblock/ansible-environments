@@ -30,3 +30,6 @@ export type { ParameterSchema, SchemaNode } from './CreatorService';
 
 export { GalaxyCollectionCache } from './GalaxyCollectionCache';
 export type { GalaxyCollection } from './GalaxyCollectionCache';
+
+export { TerminalService } from './TerminalService';
+export type { CommandResult, ManagedTerminal, SendCommandOptions, CreateTerminalOptions } from './TerminalService';

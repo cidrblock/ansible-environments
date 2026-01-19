@@ -1,8 +1,27 @@
-import * as vscode from 'vscode';
+// Try to import vscode - will fail in standalone MCP mode
+let vscode: typeof import('vscode') | undefined;
+try {
+    vscode = require('vscode');
+} catch {
+    // Running in standalone mode (MCP server)
+    vscode = undefined;
+}
+
 import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
-import { log } from '../extension';
+import * as os from 'os';
+
+// Import log function conditionally
+let log: (message: string) => void = console.error;
+try {
+    const ext = require('../extension');
+    if (ext.log) {
+        log = ext.log;
+    }
+} catch {
+    // Running standalone
+}
 
 export interface GalaxyCollection {
     namespace: string;
@@ -32,35 +51,80 @@ interface GalaxyApiResponse {
 const CACHE_FILE_NAME = 'galaxy-collections-cache.json';
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
+// Simple event emitter for standalone mode
+class SimpleEventEmitter<T> {
+    private _listeners: Array<(e: T) => void> = [];
+    
+    get event() {
+        return (listener: (e: T) => void) => {
+            this._listeners.push(listener);
+            return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+        };
+    }
+    
+    fire(data: T) {
+        this._listeners.forEach(l => l(data));
+    }
+}
+
 export class GalaxyCollectionCache {
     private static _instance: GalaxyCollectionCache | undefined;
     private _collections: GalaxyCollection[] = [];
     private _loading: boolean = false;
     private _loaded: boolean = false;
     private _loadPromise: Promise<void> | undefined;
-    private _statusBarItem: vscode.StatusBarItem | undefined;
-    private _onDidLoad = new vscode.EventEmitter<void>();
+    private _statusBarItem: any | undefined;
+    private _onDidLoad = vscode ? new vscode.EventEmitter<void>() : new SimpleEventEmitter<void>();
     public readonly onDidLoad = this._onDidLoad.event;
     private _totalCount: number = 0;
     private _loadedCount: number = 0;
-    private _onDidUpdateProgress = new vscode.EventEmitter<{ loaded: number; total: number }>();
+    private _onDidUpdateProgress = vscode 
+        ? new vscode.EventEmitter<{ loaded: number; total: number }>() 
+        : new SimpleEventEmitter<{ loaded: number; total: number }>();
     public readonly onDidUpdateProgress = this._onDidUpdateProgress.event;
-    private _extensionContext: vscode.ExtensionContext | undefined;
+    private _extensionContext: any | undefined;
     private _cacheTimestamp: number = 0;
+    private _standaloneMode: boolean = !vscode;
 
     private constructor() {
-        this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+        if (vscode) {
+            this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+        }
     }
 
-    public setExtensionContext(context: vscode.ExtensionContext): void {
+    public setExtensionContext(context: any): void {
         this._extensionContext = context;
     }
 
     private get _cacheFilePath(): string | undefined {
-        if (!this._extensionContext) {
-            return undefined;
+        // In extension mode, use extension context's global storage
+        if (this._extensionContext) {
+            return path.join(this._extensionContext.globalStorageUri.fsPath, CACHE_FILE_NAME);
         }
-        return path.join(this._extensionContext.globalStorageUri.fsPath, CACHE_FILE_NAME);
+        
+        // In standalone mode, use ~/.vscode/extensions/cidrblock.ansible-environments/ or fallback
+        if (this._standaloneMode) {
+            // Try to find the extension's global storage in standard locations
+            const vscodeDir = path.join(os.homedir(), '.vscode', 'extensions', 'cidrblock.ansible-environments-0.0.1');
+            const cursorDir = path.join(os.homedir(), '.cursor', 'extensions', 'cidrblock.ansible-environments-0.0.1');
+            
+            // Check which exists
+            if (fs.existsSync(vscodeDir)) {
+                return path.join(vscodeDir, CACHE_FILE_NAME);
+            }
+            if (fs.existsSync(cursorDir)) {
+                return path.join(cursorDir, CACHE_FILE_NAME);
+            }
+            
+            // Fallback to home directory
+            const fallbackDir = path.join(os.homedir(), '.ansible-environments');
+            if (!fs.existsSync(fallbackDir)) {
+                fs.mkdirSync(fallbackDir, { recursive: true });
+            }
+            return path.join(fallbackDir, CACHE_FILE_NAME);
+        }
+        
+        return undefined;
     }
 
     public getProgress(): { loaded: number; total: number } {
@@ -297,20 +361,24 @@ export class GalaxyCollectionCache {
                 }, 5000);
             }
             
-            // Show dismissable error message with details
+            // Show dismissable error message with details (only in extension mode)
             const errorMessage = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(
-                `Failed to load Galaxy collections: ${errorMessage}`,
-                { modal: false },
-                'Retry'
-            ).then(selection => {
-                if (selection === 'Retry') {
-                    this._loaded = false;
-                    this._loading = false;
-                    this._loadPromise = undefined;
-                    this.startBackgroundLoad();
-                }
-            });
+            if (vscode) {
+                vscode.window.showErrorMessage(
+                    `Failed to load Galaxy collections: ${errorMessage}`,
+                    { modal: false },
+                    'Retry'
+                ).then(selection => {
+                    if (selection === 'Retry') {
+                        this._loaded = false;
+                        this._loading = false;
+                        this._loadPromise = undefined;
+                        this.startBackgroundLoad();
+                    }
+                });
+            } else {
+                log(`Failed to load Galaxy collections: ${errorMessage}`);
+            }
         } finally {
             this._loading = false;
         }

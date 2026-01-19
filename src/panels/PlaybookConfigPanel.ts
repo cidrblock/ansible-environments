@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PlaybooksService, PlaybookInfo, PlaybookConfig } from '../services/PlaybooksService';
+import { TerminalService } from '../services/TerminalService';
 import { log } from '../extension';
 
 export class PlaybookConfigPanel {
@@ -49,7 +50,13 @@ export class PlaybookConfigPanel {
     ) {
         this._panel = panel;
         this._extensionUri = extensionUri;
-        this._playbook = playbook || { name: 'Global Defaults', path: '', relativePath: '', plays: [] };
+        this._playbook = playbook || { 
+            name: 'Global Defaults', 
+            path: '', 
+            relativePath: '', 
+            workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri || vscode.Uri.file('/'),
+            plays: [] 
+        };
         this._isGlobal = isGlobal;
 
         this._panel.webview.html = this._getHtml();
@@ -102,37 +109,13 @@ export class PlaybookConfigPanel {
 
             log(`PlaybookConfigPanel: Running: ${command}`);
 
-            // Try to use Python environment terminal
-            const pythonEnvExtension = vscode.extensions.getExtension('ms-python.vscode-python-envs');
-            
-            if (pythonEnvExtension) {
-                if (!pythonEnvExtension.isActive) {
-                    await pythonEnvExtension.activate();
-                }
-                
-                const api = pythonEnvExtension.exports;
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await api.getEnvironment(workspaceFolder);
-
-                if (environment) {
-                    const terminal = await api.createTerminal(environment, {
-                        name: `ansible-playbook: ${this._playbook.name}`,
-                        cwd: workspaceFolder,
-                    });
-                    terminal.show();
-                    terminal.sendText(command);
-                    this._panel.dispose();
-                    return;
-                }
-            }
-
-            // Fallback to regular terminal
-            const terminal = vscode.window.createTerminal({
+            // Use TerminalService for proper venv handling
+            const terminalService = TerminalService.getInstance();
+            const managed = await terminalService.createActivatedTerminal({
                 name: `ansible-playbook: ${this._playbook.name}`,
-                cwd: vscode.workspace.workspaceFolders?.[0]?.uri,
+                show: true,
             });
-            terminal.show();
-            terminal.sendText(command);
+            managed.sendCommand(command, { waitForCompletion: false });
             this._panel.dispose();
 
         } catch (error) {

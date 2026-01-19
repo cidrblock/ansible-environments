@@ -6,7 +6,7 @@
   "publisher": "cidrblock",
   "icon": "resources/ansible-icon.png",
   "engines": {
-    "vscode": "^1.85.0",
+    "vscode": "^1.93.0",
     "node": ">=18.0.0"
   },
   "categories": [
@@ -74,7 +74,8 @@
         {
           "id": "ansibleMcpTools",
           "name": "AI Tools",
-          "type": "tree"
+          "type": "tree",
+          "when": "config.ansibleEnvironments.enableAiFeatures"
         }
       ]
     },
@@ -301,12 +302,12 @@
         },
         {
           "command": "ansibleDevToolsCollections.aiSummary",
-          "when": "view == ansibleDevToolsCollections",
+          "when": "view == ansibleDevToolsCollections && config.ansibleEnvironments.enableAiFeatures",
           "group": "navigation@5"
         },
         {
           "command": "ansibleExecutionEnvironments.aiSummary",
-          "when": "view == ansibleExecutionEnvironments",
+          "when": "view == ansibleExecutionEnvironments && config.ansibleEnvironments.enableAiFeatures",
           "group": "navigation@1"
         },
         {
@@ -316,7 +317,7 @@
         },
         {
           "command": "ansibleCreator.aiSummary",
-          "when": "view == ansibleCreator",
+          "when": "view == ansibleCreator && config.ansibleEnvironments.enableAiFeatures",
           "group": "navigation@1"
         },
         {
@@ -343,7 +344,7 @@
       "view/item/context": [
         {
           "command": "ansibleDevToolsCollections.aiCollectionSummary",
-          "when": "view == ansibleDevToolsCollections && viewItem == collection",
+          "when": "view == ansibleDevToolsCollections && viewItem == collection && config.ansibleEnvironments.enableAiFeatures",
           "group": "inline"
         },
         {
@@ -353,12 +354,12 @@
         },
         {
           "command": "ansibleDevToolsCollections.aiPluginSummary",
-          "when": "view == ansibleDevToolsCollections && viewItem == plugin",
+          "when": "view == ansibleDevToolsCollections && viewItem == plugin && config.ansibleEnvironments.enableAiFeatures",
           "group": "inline@2"
         },
         {
           "command": "ansibleExecutionEnvironments.aiEESummary",
-          "when": "view == ansibleExecutionEnvironments && viewItem == executionEnvironment",
+          "when": "view == ansibleExecutionEnvironments && viewItem == executionEnvironment && config.ansibleEnvironments.enableAiFeatures",
           "group": "inline"
         },
         {
@@ -368,7 +369,7 @@
         },
         {
           "command": "ansibleCreator.aiEntrySummary",
-          "when": "view == ansibleCreator && viewItem == creatorCommand",
+          "when": "view == ansibleCreator && viewItem == creatorCommand && config.ansibleEnvironments.enableAiFeatures",
           "group": "inline@2"
         },
         {
@@ -388,7 +389,7 @@
         },
         {
           "command": "ansiblePlaybooks.aiSummary",
-          "when": "view == ansiblePlaybooks && viewItem == playbook",
+          "when": "view == ansiblePlaybooks && viewItem == playbook && config.ansibleEnvironments.enableAiFeatures",
           "group": "inline@4"
         },
         {
@@ -401,6 +402,11 @@
     "configuration": {
       "title": "Ansible Environments",
       "properties": {
+        "ansibleEnvironments.enableAiFeatures": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI enhancements (AI Tools view, sparkle icons, AI prompt buttons)"
+        },
         "ansibleEnvironments.pluginDocZoom": {
           "type": "number",
           "default": 100,
@@ -432,7 +438,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",

@@ -11,6 +11,7 @@ try {
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
 import { findExecutableWithCache } from './EnvironmentCache';
+import { TerminalService } from './TerminalService';
 
 /**
  * Information about an installed dev tools package
@@ -202,25 +203,17 @@ export class DevToolsService {
 
         await this.initialize();
 
-        if (!this._pythonEnvApi) {
-            throw new Error('Python Environments API not available');
+        if (!vscode) {
+            throw new Error('This operation requires VS Code');
         }
 
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-        const environment = await this._pythonEnvApi.getEnvironment(workspaceFolder);
-
-        if (!environment) {
-            throw new Error('No Python environment selected');
-        }
-
-        // Use terminal for upgrade with --upgrade-strategy eager
-        const terminal = await this._pythonEnvApi.createTerminal(environment, {
+        // Use TerminalService for proper venv handling
+        const terminalService = TerminalService.getInstance();
+        const managed = await terminalService.createActivatedTerminal({
             name: 'Upgrade ansible-dev-tools',
-            cwd: workspaceFolder
+            show: true,
         });
-
-        terminal.show();
-        terminal.sendText('pip install --upgrade --upgrade-strategy eager ansible-dev-tools');
+        managed.sendCommand('pip install --upgrade --upgrade-strategy eager ansible-dev-tools', { waitForCompletion: false });
     }
 
     /**

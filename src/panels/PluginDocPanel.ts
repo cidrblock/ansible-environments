@@ -107,6 +107,7 @@ export class PluginDocPanel {
             const config = vscode.workspace.getConfiguration('ansibleEnvironments');
             const zoom = config.get<number>('pluginDocZoom', 100);
             const themeSetting = config.get<string>('pluginDocTheme', 'auto');
+            const enableAiFeatures = config.get<boolean>('enableAiFeatures', true);
             
             // Resolve 'auto' to actual theme based on VS Code's current theme
             const vscodeThemeKind = vscode.window.activeColorTheme.kind;
@@ -116,7 +117,7 @@ export class PluginDocPanel {
                 ? (isVsCodeLight ? 'light' : 'dark')
                 : themeSetting;
 
-            this._panel.webview.html = this._getDocHtml(pluginFullName, pluginType, pluginData, zoom, themeSetting, resolvedTheme);
+            this._panel.webview.html = this._getDocHtml(pluginFullName, pluginType, pluginData, zoom, themeSetting, resolvedTheme, enableAiFeatures);
         } catch (error) {
             this._panel.webview.html = this._getErrorHtml(`Failed to load documentation: ${error}`);
         }
@@ -187,7 +188,7 @@ export class PluginDocPanel {
 </html>`;
     }
 
-    private _getDocHtml(pluginFullName: string, pluginType: string, data: PluginData, initialZoom: number = 100, themeSetting: string = 'auto', resolvedTheme: string = 'dark'): string {
+    private _getDocHtml(pluginFullName: string, pluginType: string, data: PluginData, initialZoom: number = 100, themeSetting: string = 'auto', resolvedTheme: string = 'dark', enableAiFeatures: boolean = true): string {
         const doc = data.doc!;
         const parts = pluginFullName.split('.');
         const namespace = parts[0];
@@ -709,8 +710,10 @@ export class PluginDocPanel {
         <button class="toolbar-btn" id="zoom-in-btn" title="Zoom in">+</button>
         <div class="toolbar-divider"></div>
         <button class="toolbar-btn" id="theme-btn" title="Toggle theme">${themeSetting}</button>
+        ${enableAiFeatures ? `
         <div class="toolbar-divider"></div>
         <button class="toolbar-btn ai-btn" id="ai-prompt-btn" title="Generate AI prompt for task builder">AI</button>
+        ` : ''}
     </div>
     
     <div class="container">
@@ -1029,31 +1032,33 @@ export class PluginDocPanel {
             }
         })();
         
-        // AI prompt generation
+        // AI prompt generation (only if AI features enabled)
         const pluginFullName = "${pluginFullName}";
         const pluginType = "${pluginType}";
-        
-        document.getElementById('ai-prompt-btn').addEventListener('click', function() {
-            const prompt = \`Help me create an Ansible task using the \${pluginFullName} \${pluginType}, guiding me through the required and optional parameters. Use the build_ansible_task MCP tool to accomplish this.\`;
-            
-            // Copy to clipboard
-            const btn = this;
-            const originalText = btn.innerHTML;
-            navigator.clipboard.writeText(prompt).then(() => {
-                btn.innerHTML = '✓';
-                btn.style.background = 'var(--success)';
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.style.background = '';
-                }, 2000);
+        const aiBtn = document.getElementById('ai-prompt-btn');
+        if (aiBtn) {
+            aiBtn.addEventListener('click', function() {
+                const prompt = \`Help me create an Ansible task using the \${pluginFullName} \${pluginType}, guiding me through the required and optional parameters. Use the build_ansible_task MCP tool to accomplish this.\`;
+                
+                // Copy to clipboard
+                const btn = this;
+                const originalText = btn.innerHTML;
+                navigator.clipboard.writeText(prompt).then(() => {
+                    btn.innerHTML = '✓';
+                    btn.style.background = 'var(--success)';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.style.background = '';
+                    }, 2000);
+                });
+                
+                // Also send message to extension to open chat
+                vscode.postMessage({
+                    type: 'aiPrompt',
+                    prompt: prompt
+                });
             });
-            
-            // Also send message to extension to open chat
-            vscode.postMessage({
-                type: 'aiPrompt',
-                prompt: prompt
-            });
-        });
+        }
     </script>
 </body>
 </html>`;

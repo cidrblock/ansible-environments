@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { log } from '../extension';
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import { TerminalService } from '../services/TerminalService';
 
 interface SchemaNode {
     name: string;
@@ -105,42 +106,19 @@ export class CreatorFormPanel {
 
     private async _executeCommand(values: Record<string, unknown>): Promise<void> {
         try {
-            const pythonEnvExtension = vscode.extensions.getExtension<PythonEnvironmentApi>(
-                'ms-python.vscode-python-envs',
-            );
-
-            if (!pythonEnvExtension) {
-                vscode.window.showErrorMessage('Python Environments extension not found');
-                return;
-            }
-
-            if (!pythonEnvExtension.isActive) {
-                await pythonEnvExtension.activate();
-            }
-
-            const api = pythonEnvExtension.exports;
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await api.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                vscode.window.showErrorMessage('Please select a Python environment first');
-                return;
-            }
-
             // Build the command
             const args = this._buildCommandArgs(values);
             const commandStr = `ansible-creator ${this._commandPath.join(' ')} ${args}`;
 
             log(`CreatorFormPanel: Executing: ${commandStr}`);
 
-            // Create terminal and run
-            const terminal = await api.createTerminal(environment, {
+            // Use TerminalService for proper venv handling
+            const terminalService = TerminalService.getInstance();
+            const managed = await terminalService.createActivatedTerminal({
                 name: `ansible-creator ${this._commandPath.join(' ')}`,
-                cwd: workspaceFolder,
+                show: true,
             });
-
-            terminal.show();
-            terminal.sendText(commandStr);
+            managed.sendCommand(commandStr, { waitForCompletion: false });
 
             // Close the form panel
             this._panel.dispose();

@@ -10,6 +10,7 @@ try {
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
 import { findExecutableWithCache } from './EnvironmentCache';
+import { TerminalService } from './TerminalService';
 
 /**
  * Schema for a command parameter
@@ -324,23 +325,14 @@ export class CreatorService {
 
         const command = commandParts.join(' ');
 
-        if (vscode && this._pythonEnvApi) {
-            // VS Code mode - use terminal
-            await this.initialize();
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await this._pythonEnvApi!.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                throw new Error('No Python environment selected');
-            }
-
-            const terminal = await this._pythonEnvApi!.createTerminal(environment, {
+        if (vscode) {
+            // VS Code mode - use TerminalService for proper venv handling
+            const terminalService = TerminalService.getInstance();
+            const managed = await terminalService.createActivatedTerminal({
                 name: `ansible-creator ${path.join(' ')}`,
-                cwd: workspaceFolder
+                show: true,
             });
-
-            terminal.show();
-            terminal.sendText(command);
+            managed.sendCommand(command, { waitForCompletion: false });
         } else {
             // Standalone mode - execute directly
             const output = await this._runCommand(command);

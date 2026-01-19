@@ -13,6 +13,7 @@ export interface PlaybookInfo {
     name: string;
     path: string;
     relativePath: string;
+    workspaceFolder: vscode.Uri;
     plays: PlaybookPlay[];
 }
 
@@ -159,6 +160,7 @@ export class PlaybooksService {
                             name,
                             path: file.fsPath,
                             relativePath: displayPath,
+                            workspaceFolder: folder.uri,
                             plays,
                         });
                     }

@@ -13,6 +13,7 @@ import { CollectionsService, PluginOption } from '../services/CollectionsService
 import { DevToolsService } from '../services/DevToolsService';
 import { ExecutionEnvService } from '../services/ExecutionEnvService';
 import { CreatorService } from '../services/CreatorService';
+import { GalaxyCollectionCache } from '../services/GalaxyCollectionCache';
 
 // Helper to convert string | string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -54,6 +55,8 @@ export class McpToolHandler {
                     return this._handleListCollections(args);
                 case 'install_ansible_collection':
                     return this._handleInstallCollection(args);
+                case 'search_galaxy_collections':
+                    return this._handleSearchGalaxyCollections(args);
                 case 'get_collection_plugins':
                     return this._handleGetCollectionPlugins(args);
 
@@ -294,6 +297,60 @@ export class McpToolHandler {
         } catch (error) {
             return {
                 content: [{ type: 'text', text: `Failed to install collection: ${error}` }],
+                isError: true
+            };
+        }
+    }
+
+    private async _handleSearchGalaxyCollections(args: Record<string, unknown>): Promise<McpToolResult> {
+        const query = args.query as string;
+        if (!query) {
+            return {
+                content: [{ type: 'text', text: 'Missing required parameter: query' }],
+                isError: true
+            };
+        }
+
+        const limit = Math.min(args.limit as number || 20, 100);
+        
+        try {
+            const cache = GalaxyCollectionCache.getInstance();
+            await cache.ensureLoaded();
+            
+            const results = cache.search(query).slice(0, limit);
+            
+            if (results.length === 0) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `No collections found matching "${query}"`
+                    }]
+                };
+            }
+
+            const lines = [
+                `Found ${results.length} collections matching "${query}":`,
+                ''
+            ];
+
+            for (const col of results) {
+                const fqcn = `${col.namespace}.${col.name}`;
+                const deprecated = col.deprecated ? ' [DEPRECATED]' : '';
+                const downloads = col.downloadCount > 1000 
+                    ? `${Math.round(col.downloadCount / 1000)}k downloads`
+                    : `${col.downloadCount} downloads`;
+                lines.push(`• ${fqcn} (v${col.version}) - ${downloads}${deprecated}`);
+            }
+
+            lines.push('');
+            lines.push('To install a collection, use: install_ansible_collection({ name: "namespace.collection" })');
+
+            return {
+                content: [{ type: 'text', text: lines.join('\n') }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `Failed to search Galaxy collections: ${error}` }],
                 isError: true
             };
         }

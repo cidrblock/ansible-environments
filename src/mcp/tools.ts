@@ -114,6 +114,34 @@ Examples:
     }
 };
 
+export const SEARCH_GALAXY_COLLECTIONS_TOOL: McpToolDefinition = {
+    name: 'search_galaxy_collections',
+    description: `Search Ansible Galaxy for collections by keyword.
+
+Searches the full Galaxy catalog (~4000+ collections) to find relevant collections.
+Use this to discover collections for specific use cases before installing them.
+
+Examples:
+- search_galaxy_collections({ query: "kubernetes" }) → finds k8s-related collections
+- search_galaxy_collections({ query: "cisco" }) → finds Cisco network collections
+- search_galaxy_collections({ query: "aws" }) → finds AWS cloud collections
+- search_galaxy_collections({ query: "windows" }) → finds Windows management collections`,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            query: {
+                type: 'string',
+                description: 'Search terms (e.g., "kubernetes", "cisco", "aws", "vmware")'
+            },
+            limit: {
+                type: 'number',
+                description: 'Maximum results (default: 20, max: 100)'
+            }
+        },
+        required: ['query']
+    }
+};
+
 export const GET_COLLECTION_PLUGINS_TOOL: McpToolDefinition = {
     name: 'get_collection_plugins',
     description: `List all plugins in a specific Ansible collection.
@@ -402,6 +430,7 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     GET_PLUGIN_DOC_TOOL,
     LIST_COLLECTIONS_TOOL,
     INSTALL_COLLECTION_TOOL,
+    SEARCH_GALAXY_COLLECTIONS_TOOL,
     GET_COLLECTION_PLUGINS_TOOL,
     
     // Task generation

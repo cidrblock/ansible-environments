@@ -60,6 +60,11 @@ export interface DidChangeEnvironmentEventArgs {
     new?: PythonEnvironment;
 }
 
+export interface TerminalActivationStateEventArgs {
+    terminal: vscode.Terminal;
+    activated: boolean;
+}
+
 /**
  * The main API exported by ms-python.vscode-python-envs
  */
@@ -79,4 +84,5 @@ export interface PythonEnvironmentApi {
     
     // Events
     onDidChangeEnvironment?: vscode.Event<DidChangeEnvironmentEventArgs>;
+    onDidChangeTerminalActivationState?: vscode.Event<TerminalActivationStateEventArgs>;
 }
