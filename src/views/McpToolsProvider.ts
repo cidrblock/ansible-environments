@@ -322,58 +322,21 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
 export async function injectToolPromptIntoChat(toolInfo: ToolInfo): Promise<void> {
     const prompt = toolInfo.examplePrompt;
 
-    // Try different methods to inject into chat
-    const methods = [
-        // VS Code Copilot chat commands
-        'workbench.panel.chat.view.copilot.focus',
-        'workbench.action.chat.open',
-        'github.copilot.chat.focus',
-        // Cursor chat commands (may vary)
-        'aichat.newchataction',
-    ];
-
-    let chatOpened = false;
-
-    for (const cmd of methods) {
-        try {
-            await vscode.commands.executeCommand(cmd);
-            chatOpened = true;
-            log(`McpToolsProvider: Opened chat with command: ${cmd}`);
-            break;
-        } catch {
-            // Command not available, try next
-        }
-    }
-
-    if (!chatOpened) {
+    // Try to open chat with the prompt directly (VS Code 1.93+ with Copilot)
+    try {
+        await vscode.commands.executeCommand('workbench.action.chat.open', prompt);
+        vscode.window.showInformationMessage('Prompt sent to chat.');
+        log(`McpToolsProvider: Opened chat with prompt`);
+    } catch {
         // Fallback: copy to clipboard and notify user
         await vscode.env.clipboard.writeText(prompt);
         vscode.window.showInformationMessage(
             'AI prompt copied to clipboard. Paste it into an agent chat session.',
-            'Paste in Chat'
-        );
-        return;
-    }
-
-    // Small delay to let the chat panel focus
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Try to insert text into the chat input
-    try {
-        // Method 1: Use the type command to insert text
-        await vscode.commands.executeCommand('type', { text: prompt });
-        log(`McpToolsProvider: Inserted prompt via type command`);
-    } catch {
-        // Method 2: Copy to clipboard as fallback
-        await vscode.env.clipboard.writeText(prompt);
-        try {
-            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-            log(`McpToolsProvider: Inserted prompt via paste`);
-        } catch {
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Paste in Chat'
-            );
-        }
+            'Open Chat'
+        ).then(selection => {
+            if (selection === 'Open Chat') {
+                vscode.commands.executeCommand('workbench.action.chat.open');
+            }
+        });
     }
 }

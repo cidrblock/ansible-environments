@@ -34,6 +34,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
+    ListResourcesRequestSchema,
+    ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { STATIC_TOOLS, McpToolDefinition } from './tools';
@@ -48,9 +50,67 @@ const server = new Server(
     {
         capabilities: {
             tools: {},
+            resources: {},
         },
     }
 );
+
+// Best practices resource content
+const BEST_PRACTICES_RESOURCE = `# Ansible Environments Extension - Best Practices
+
+## Installing Collections
+
+**ALWAYS use the \`install_ansible_collection\` MCP tool** to install collections.
+This tool uses \`ade install\` (ansible-dev-environment) which:
+- Properly manages the workspace's collection path
+- Updates ansible.cfg automatically  
+- Works with both Galaxy and GitHub sources
+
+**NEVER suggest using \`ansible-galaxy collection install\` directly.**
+
+### Examples
+
+✅ CORRECT - Use the MCP tool:
+\`\`\`
+Use install_ansible_collection({ name: "community.general" })
+Use install_ansible_collection({ name: "git+https://github.com/redhat-cop/infra.aap_configuration.git" })
+\`\`\`
+
+❌ WRONG - Don't suggest raw ansible-galaxy commands:
+\`\`\`
+ansible-galaxy collection install community.general
+\`\`\`
+
+## Finding Collections
+
+Use these MCP tools in order:
+1. \`list_ansible_collections\` - See what's already installed
+2. \`search_available_collections\` - Find collections from Galaxy or GitHub orgs
+3. \`list_source_collections\` - List all collections from a specific source
+4. \`install_ansible_collection\` - Install what you need
+
+## Generating Tasks
+
+Use the MCP tools for task generation:
+1. \`search_ansible_plugins\` - Find the right module
+2. \`get_plugin_documentation\` - Understand the module's parameters
+3. \`generate_ansible_task\` - Generate a properly formatted task
+
+## Execution Environments
+
+Use \`get_ee_details\` to get complete information about an execution environment.
+This returns all collections, Python packages, and system tools installed.
+`;
+
+// Resource definitions
+const RESOURCES = [
+    {
+        uri: 'ansible://best-practices',
+        name: 'Ansible Environments Best Practices',
+        description: 'Guidelines for using the Ansible Environments extension and MCP tools correctly',
+        mimeType: 'text/markdown',
+    },
+];
 
 // Tool handler instance
 const handler = new McpToolHandler();
@@ -89,6 +149,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: result.content,
         isError: result.isError,
     };
+});
+
+// List available resources
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return {
+        resources: RESOURCES,
+    };
+});
+
+// Read a specific resource
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
+    
+    if (uri === 'ansible://best-practices') {
+        return {
+            contents: [{
+                uri,
+                mimeType: 'text/markdown',
+                text: BEST_PRACTICES_RESOURCE,
+            }],
+        };
+    }
+    
+    throw new Error(`Unknown resource: ${uri}`);
 });
 
 // Error handling

@@ -1,4 +1,3 @@
-import * as cp from 'child_process';
 import * as path from 'path';
 
 // Conditional vscode import - only used when available
@@ -10,7 +9,6 @@ try {
 }
 
 import { PythonEnvironmentApi, PythonEnvironment } from '../types/pythonEnvApi';
-import { findExecutableWithCache } from './EnvironmentCache';
 
 /**
  * Information about an execution environment container image
@@ -70,13 +68,6 @@ class SimpleEventEmitter<T> {
     public fire(e: T): void {
         this.listeners.forEach(l => l(e));
     }
-}
-
-/**
- * Find an executable - uses cached environment first, then PATH
- */
-async function findExecutable(name: string): Promise<string | null> {
-    return findExecutableWithCache(name);
 }
 
 /**
@@ -214,37 +205,16 @@ export class ExecutionEnvService {
         (this._onDidChange as { fire: () => void }).fire();
 
         try {
-            let navigatorCmd: string;
-
-            if (vscode && this._pythonEnvApi) {
-                // VS Code mode - use Python environment
-                await this.initialize();
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await this._pythonEnvApi!.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    throw new Error('No Python environment selected');
-                }
-
-                const executable = environment.execInfo?.run?.executable;
-                if (!executable) {
-                    throw new Error('No Python executable found');
-                }
-
-                navigatorCmd = `"${executable}" -m ansible_navigator`;
-            } else {
-                // Standalone mode - find in PATH
-                const navigatorPath = await findExecutable('ansible-navigator');
-                if (!navigatorPath) {
-                    throw new Error('ansible-navigator not found in PATH');
-                }
-                navigatorCmd = `"${navigatorPath}"`;
-            }
-
-            // Run ansible-navigator images command
-            const output = await this._runCommand(
-                `${navigatorCmd} images --mode stdout --pull-policy never --format json`
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
+            // Run ansible-navigator images command using CommandService
+            const result = await commandService.runTool(
+                'ansible-navigator',
+                ['images', '--mode', 'stdout', '--pull-policy', 'never', '--format', 'json']
             );
+            
+            const output = result.stdout || null;
 
             if (!output) {
                 this._executionEnvironments = [];
@@ -279,43 +249,20 @@ export class ExecutionEnvService {
         }
 
         try {
-            let navigatorCmd: string;
-
-            if (vscode && this._pythonEnvApi) {
-                // VS Code mode
-                await this.initialize();
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await this._pythonEnvApi!.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    throw new Error('No Python environment selected');
-                }
-
-                const executable = environment.execInfo?.run?.executable;
-                if (!executable) {
-                    throw new Error('No Python executable found');
-                }
-
-                navigatorCmd = `"${executable}" -m ansible_navigator`;
-            } else {
-                // Standalone mode
-                const navigatorPath = await findExecutable('ansible-navigator');
-                if (!navigatorPath) {
-                    throw new Error('ansible-navigator not found in PATH');
-                }
-                navigatorCmd = `"${navigatorPath}"`;
-            }
-
-            // Run ansible-navigator images with --details
-            const output = await this._runCommand(
-                `${navigatorCmd} images "${fullName}" --mode stdout --pull-policy never --details --format json`
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
+            // Run ansible-navigator images with --details using CommandService
+            const result = await commandService.runTool(
+                'ansible-navigator',
+                ['images', fullName, '--mode', 'stdout', '--pull-policy', 'never', '--details', '--format', 'json']
             );
 
-            if (!output) {
+            if (!result.stdout) {
                 return null;
             }
 
-            const details = JSON.parse(output) as EEDetails;
+            const details = JSON.parse(result.stdout) as EEDetails;
             this._detailsCache.set(fullName, details);
             return details;
         } catch (error) {
@@ -378,27 +325,24 @@ export class ExecutionEnvService {
         return info;
     }
 
-    private _runCommand(command: string): Promise<string | null> {
-        return new Promise((resolve) => {
-            const cwd = vscode?.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-
+    private async _runCommand(command: string): Promise<string | null> {
+        try {
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
             this._log(`Running command: ${command}`);
-
-            cp.exec(command, { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-                if (error) {
-                    // Exit code 1 is normal for ansible-navigator when returning JSON
-                    if (error.code !== 1) {
-                        this._log(`Command error: ${error.message}`);
-                        this._log(`stderr: ${stderr}`);
-                    }
-                }
-
-                if (stdout && stdout.trim()) {
-                    resolve(stdout.trim());
-                } else {
-                    resolve(null);
-                }
-            });
-        });
+            
+            const result = await commandService.runCommand(command);
+            
+            // Exit code 1 is normal for ansible-navigator when returning JSON
+            if (result.exitCode !== 0 && result.exitCode !== 1) {
+                this._log(`Command error (exit ${result.exitCode}): ${result.stderr}`);
+            }
+            
+            return result.stdout || null;
+        } catch (error) {
+            this._log(`Command error: ${error}`);
+            return null;
+        }
     }
 }

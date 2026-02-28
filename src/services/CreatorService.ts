@@ -1,4 +1,4 @@
-import * as cp from 'child_process';
+// Command execution is handled by CommandService
 
 // Conditional vscode import - only used when available
 let vscode: typeof import('vscode') | undefined;
@@ -9,7 +9,6 @@ try {
 }
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-import { findExecutableWithCache } from './EnvironmentCache';
 
 // TerminalService is only available in VS Code context - lazy load to avoid
 // breaking the MCP server which runs standalone
@@ -62,13 +61,6 @@ class SimpleEventEmitter<T> {
     public fire(e: T): void {
         this.listeners.forEach(l => l(e));
     }
-}
-
-/**
- * Find an executable - uses cached environment first, then PATH
- */
-async function findExecutable(name: string): Promise<string | null> {
-    return findExecutableWithCache(name);
 }
 
 /**
@@ -191,39 +183,19 @@ export class CreatorService {
         (this._onDidChange as { fire: () => void }).fire();
 
         try {
-            let output: string | null;
-
-            if (vscode && this._pythonEnvApi) {
-                // VS Code mode - use Python environment
-                await this.initialize();
-                const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-                const environment = await this._pythonEnvApi!.getEnvironment(workspaceFolder);
-
-                if (!environment) {
-                    this._log('No Python environment selected');
-                    return null;
-                }
-
-                const executable = environment.execInfo?.run?.executable;
-                if (!executable) {
-                    this._log('No Python executable found');
-                    return null;
-                }
-
-                output = await this._runCommand(`"${executable}" -m ansible_creator schema`);
-            } else {
-                // Standalone mode - find ansible-creator in PATH
-                const creatorPath = await findExecutable('ansible-creator');
-                if (!creatorPath) {
-                    this._log('ansible-creator not found in PATH');
-                    return null;
-                }
-
-                output = await this._runCommand(`"${creatorPath}" schema`);
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
+            // Use CommandService to run ansible-creator schema
+            const result = await commandService.runTool('ansible-creator', ['schema']);
+            
+            if (result.exitCode !== 0) {
+                this._log(`ansible-creator schema failed: ${result.stderr}`);
+                return null;
             }
 
-            if (output) {
-                this._schema = JSON.parse(output);
+            if (result.stdout) {
+                this._schema = JSON.parse(result.stdout);
                 this._loaded = true;
                 this._log('Schema loaded successfully');
             }
@@ -320,43 +292,83 @@ export class CreatorService {
      * Run an ansible-creator command
      * In VS Code: opens a terminal
      * Standalone: executes via child_process and returns output
+     * 
+     * @param path - Command path like ['init', 'playbook']
+     * @param args - Arguments (positional args first, then flags)
+     * @param positionalArgs - Ordered list of positional argument keys to extract from args
      */
-    public async runCommand(path: string[], args: Record<string, string | boolean>): Promise<string | void> {
-        // Build the command
-        const commandParts = ['ansible-creator', ...path];
+    public async runCommand(
+        path: string[], 
+        args: Record<string, string | boolean>,
+        positionalArgs?: string[]
+    ): Promise<string> {
+        // Build the command arguments (not including 'ansible-creator' itself)
+        const cmdArgs: string[] = [...path];
 
-        for (const [key, value] of Object.entries(args)) {
-            if (value === true) {
-                commandParts.push(`--${key}`);
-            } else if (value !== false && value !== '') {
-                commandParts.push(`--${key}`, String(value));
+        // If we have positional args defined, extract them in order
+        const usedKeys = new Set<string>();
+        if (positionalArgs) {
+            for (const key of positionalArgs) {
+                const value = args[key];
+                if (value !== undefined && value !== '' && value !== false) {
+                    cmdArgs.push(String(value));
+                    usedKeys.add(key);
+                }
             }
         }
 
-        const command = commandParts.join(' ');
-
-        if (vscode && TerminalService) {
-            // VS Code mode - use TerminalService for proper venv handling
-            const terminalService = TerminalService.getInstance();
-            const managed = await terminalService.createActivatedTerminal({
-                name: `ansible-creator ${path.join(' ')}`,
-                show: true,
-            });
-            managed.sendCommand(command, { waitForCompletion: false });
-        } else {
-            // Standalone mode - execute directly
-            const output = await this._runCommand(command);
-            return output || undefined;
+        // Add remaining args as flags
+        for (const [key, value] of Object.entries(args)) {
+            if (usedKeys.has(key)) continue; // Skip positional args already added
+            
+            if (value === true) {
+                cmdArgs.push(`--${key}`);
+            } else if (value !== false && value !== '') {
+                cmdArgs.push(`--${key}`, String(value));
+            }
         }
+
+        const fullCommand = `ansible-creator ${cmdArgs.join(' ')}`;
+        console.log(`CreatorService.runCommand: ${fullCommand}`);
+
+        // Use CommandService for blocking execution with proper venv PATH
+        // This waits for completion and captures output
+        const { getCommandService } = await import('./CommandService');
+        const commandService = getCommandService();
+        
+        console.log('CreatorService.runCommand: Using CommandService (blocking execution)');
+        const result = await commandService.runAnsibleCreator(cmdArgs);
+        
+        if (result.exitCode !== 0) {
+            const errorOutput = result.stderr || result.stdout || 'Unknown error';
+            throw new Error(`Command failed: ${fullCommand}\n${errorOutput}`);
+        }
+        
+        return result.stdout || 'Command completed successfully';
     }
 
     /**
      * Build the command string for a creator command (useful for MCP)
      */
-    public buildCommandString(path: string[], args: Record<string, string | boolean>): string {
+    public buildCommandString(path: string[], args: Record<string, string | boolean>, positionalArgs?: string[]): string {
         const commandParts = ['ansible-creator', ...path];
 
+        // If we have positional args defined, extract them in order
+        const usedKeys = new Set<string>();
+        if (positionalArgs) {
+            for (const key of positionalArgs) {
+                const value = args[key];
+                if (value !== undefined && value !== '' && value !== false) {
+                    commandParts.push(String(value));
+                    usedKeys.add(key);
+                }
+            }
+        }
+
+        // Add remaining args as flags
         for (const [key, value] of Object.entries(args)) {
+            if (usedKeys.has(key)) continue;
+            
             if (value === true) {
                 commandParts.push(`--${key}`);
             } else if (value !== false && value !== '') {
@@ -367,18 +379,51 @@ export class CreatorService {
         return commandParts.join(' ');
     }
 
-    private _runCommand(command: string): Promise<string | null> {
-        return new Promise((resolve) => {
-            const cwd = vscode?.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+    /**
+     * Get positional argument names for a command from the schema
+     * Positional args are those without 'aliases' in the schema
+     */
+    public getPositionalArgs(path: string[]): string[] {
+        if (!this._schema) {
+            return [];
+        }
 
-            cp.exec(command, { cwd, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-                if (error) {
-                    this._log(`Command error: ${error.message}`);
-                    resolve(null);
-                    return;
+        // Navigate to the command in the schema
+        let node: SchemaNode | undefined = this._schema;
+        for (const segment of path) {
+            node = node?.subcommands?.[segment];
+            if (!node) return [];
+        }
+
+        // Find parameters without aliases (these are positional)
+        const positionalArgs: string[] = [];
+        if (node.parameters?.properties) {
+            for (const [name, param] of Object.entries(node.parameters.properties)) {
+                if (!param.aliases || param.aliases.length === 0) {
+                    positionalArgs.push(name);
                 }
-                resolve(stdout.trim());
-            });
-        });
+            }
+        }
+
+        return positionalArgs;
+    }
+
+    private async _runCommand(command: string): Promise<string | null> {
+        try {
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
+            const result = await commandService.runCommand(command);
+            
+            if (result.exitCode !== 0) {
+                this._log(`Command error: ${result.stderr}`);
+                return null;
+            }
+            
+            return result.stdout;
+        } catch (error) {
+            this._log(`Command error: ${error}`);
+            return null;
+        }
     }
 }

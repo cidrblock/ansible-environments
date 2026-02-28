@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { log } from '../extension';
+import { getZoomThemeScript } from './webviewStyles';
 
 export interface PlaybookRunOptions {
     playbookPath: string;
@@ -714,6 +715,41 @@ export class PlaybookProgressPanel {
         .stat-changed .stat-count { color: var(--changed); }
         .stat-failed .stat-count { color: var(--error); }
         .stat-skipped .stat-count { color: var(--skipped); }
+        
+        .view-controls {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            margin-left: 8px;
+        }
+        
+        .view-controls button {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--fg);
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        
+        .view-controls button:hover {
+            background: var(--bg-hover);
+        }
+        
+        body.theme-light {
+            --bg: #ffffff;
+            --fg: #333333;
+            --bg-secondary: #f5f5f5;
+            --border: #e0e0e0;
+        }
+        
+        body.theme-dark {
+            --bg: #1e1e1e;
+            --fg: #cccccc;
+            --bg-secondary: #252526;
+            --border: #3c3c3c;
+        }
     </style>
 </head>
 <body>
@@ -722,6 +758,11 @@ export class PlaybookProgressPanel {
             <div class="header-title" id="playbook-title">Waiting for playbook...</div>
             <button class="header-btn danger" id="stop-btn" title="Stop playbook execution" disabled>Stop</button>
             <button class="header-btn" id="show-terminal-btn" title="Toggle terminal output">Terminal</button>
+            <div class="view-controls">
+                <button id="zoomOutBtn" title="Zoom out">−</button>
+                <button id="zoomInBtn" title="Zoom in">+</button>
+                <button id="themeBtn" title="Toggle theme">◐</button>
+            </div>
             <div class="status-indicator">
                 <span class="status-dot" id="status-dot"></span>
                 <span id="status-text">Idle</span>
@@ -1577,6 +1618,9 @@ export class PlaybookProgressPanel {
                 }
             });
         })();
+        
+        // Zoom/Theme controls
+        ${getZoomThemeScript('playbookProgress')}
     </script>
 </body>
 </html>`;
@@ -1647,18 +1691,19 @@ ${JSON.stringify(cleanResult, null, 2)}
 5. Compare the invocation against the module's best practices
 6. Suggest any improvements to the task configuration`;
 
-        // Copy to clipboard
-        await vscode.env.clipboard.writeText(prompt);
-        
-        // Show notification with Open Chat button
-        const action = await vscode.window.showInformationMessage(
-            'AI prompt copied to clipboard. Paste it into an agent chat session.',
-            'Open Chat'
-        );
-        
-        if (action === 'Open Chat') {
-            // Try to open the chat panel
-            await vscode.commands.executeCommand('workbench.action.chat.open');
+        // Try to open chat with prompt directly, fall back to clipboard
+        try {
+            await vscode.commands.executeCommand('workbench.action.chat.open', prompt);
+            vscode.window.showInformationMessage('Prompt sent to chat.');
+        } catch {
+            await vscode.env.clipboard.writeText(prompt);
+            const action = await vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            );
+            if (action === 'Open Chat') {
+                await vscode.commands.executeCommand('workbench.action.chat.open');
+            }
         }
     }
 

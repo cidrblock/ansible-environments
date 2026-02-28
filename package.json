@@ -53,7 +53,12 @@
         },
         {
           "id": "ansibleDevToolsCollections",
-          "name": "Collections",
+          "name": "Installed Collections",
+          "type": "tree"
+        },
+        {
+          "id": "ansibleCollectionSources",
+          "name": "Collection Sources",
           "type": "tree"
         },
         {
@@ -76,6 +81,11 @@
           "name": "AI Tools",
           "type": "tree",
           "when": "config.ansibleEnvironments.enableAiFeatures"
+        },
+        {
+          "id": "ansibleContentDesigner",
+          "name": "Content Designer",
+          "type": "tree"
         }
       ]
     },
@@ -256,6 +266,93 @@
         "command": "ansiblePlaybooks.aiSummary",
         "title": "Generate AI Summary",
         "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleCollectionSources.refresh",
+        "title": "Refresh All Sources",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleCollectionSources.refreshSource",
+        "title": "Refresh Source",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleCollectionSources.addSource",
+        "title": "Add GitHub Organization",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ansibleCollectionSources.install",
+        "title": "Install Collection",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ansibleCollectionSources.search",
+        "title": "Search Collections",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ansibleCollectionSources.searchSource",
+        "title": "Search in Source",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ansibleCollectionSources.installFromSource",
+        "title": "Install from Source",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ansibleCollectionSources.aiSummary",
+        "title": "AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleCollectionSources.aiSourceSummary",
+        "title": "Generate AI Summary",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "ansibleContentDesigner.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ansibleContentDesigner.newProject",
+        "title": "New Project",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ansibleContentDesigner.openPhase",
+        "title": "Open Phase"
+      },
+      {
+        "command": "ansibleContentDesigner.signOff",
+        "title": "Sign Off Phase",
+        "icon": "$(check)"
+      },
+      {
+        "command": "ansibleContentDesigner.export",
+        "title": "Export Design",
+        "icon": "$(export)"
+      },
+      {
+        "command": "ansibleContentDesigner.undoBuild",
+        "title": "Undo Build",
+        "category": "Content Designer",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "ansibleEnvironments.selectLlmModel",
+        "title": "Select LLM Provider & Model",
+        "category": "Ansible Environments",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "ansibleEnvironments.showLlmStatus",
+        "title": "Show LLM Status",
+        "category": "Ansible Environments",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -291,24 +388,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "ansibleDevToolsCollections.install",
+          "command": "ansibleDevToolsCollections.refresh",
           "when": "view == ansibleDevToolsCollections",
           "group": "navigation@2"
         },
         {
-          "command": "ansibleDevToolsCollections.refresh",
-          "when": "view == ansibleDevToolsCollections",
-          "group": "navigation@3"
-        },
-        {
-          "command": "ansibleDevToolsCollections.refreshGalaxyCache",
-          "when": "view == ansibleDevToolsCollections",
-          "group": "navigation@4"
-        },
-        {
           "command": "ansibleDevToolsCollections.aiSummary",
           "when": "view == ansibleDevToolsCollections && config.ansibleEnvironments.enableAiFeatures",
-          "group": "navigation@5"
+          "group": "navigation@3"
         },
         {
           "command": "ansibleExecutionEnvironments.aiSummary",
@@ -343,6 +430,41 @@
         {
           "command": "ansiblePlaybooks.refresh",
           "when": "view == ansiblePlaybooks",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleCollectionSources.search",
+          "when": "view == ansibleCollectionSources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleCollectionSources.install",
+          "when": "view == ansibleCollectionSources",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ansibleCollectionSources.addSource",
+          "when": "view == ansibleCollectionSources",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ansibleCollectionSources.refresh",
+          "when": "view == ansibleCollectionSources",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ansibleCollectionSources.aiSummary",
+          "when": "view == ansibleCollectionSources && config.ansibleEnvironments.enableAiFeatures",
+          "group": "navigation@5"
+        },
+        {
+          "command": "ansibleContentDesigner.newProject",
+          "when": "view == ansibleContentDesigner",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ansibleContentDesigner.refresh",
+          "when": "view == ansibleContentDesigner",
           "group": "navigation@2"
         }
       ],
@@ -406,6 +528,26 @@
           "command": "ansibleMcpTools.copyPrompt",
           "when": "view == ansibleMcpTools && viewItem == mcpTool",
           "group": "inline"
+        },
+        {
+          "command": "ansibleCollectionSources.installFromSource",
+          "when": "view == ansibleCollectionSources && viewItem == collectionSource",
+          "group": "inline@1"
+        },
+        {
+          "command": "ansibleCollectionSources.searchSource",
+          "when": "view == ansibleCollectionSources && viewItem == collectionSource",
+          "group": "inline@2"
+        },
+        {
+          "command": "ansibleCollectionSources.refreshSource",
+          "when": "view == ansibleCollectionSources && viewItem == collectionSource",
+          "group": "inline@3"
+        },
+        {
+          "command": "ansibleCollectionSources.aiSourceSummary",
+          "when": "view == ansibleCollectionSources && viewItem == collectionSource && config.ansibleEnvironments.enableAiFeatures",
+          "group": "inline@4"
         }
       ]
     },
@@ -427,13 +569,66 @@
         "ansibleEnvironments.pluginDocTheme": {
           "type": "string",
           "default": "auto",
-          "enum": ["auto", "light", "dark"],
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
           "enumDescriptions": [
             "Follow VS Code theme",
             "Always use light theme",
             "Always use dark theme"
           ],
           "description": "Theme for plugin documentation view"
+        },
+        "ansibleEnvironments.githubCollectionOrgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "ansible",
+            "ansible-collections",
+            "redhat-cop"
+          ],
+          "description": "GitHub organizations to scan for Ansible collections"
+        },
+        "ansibleEnvironments.llm.chatProvider": {
+          "type": "string",
+          "default": "vscode",
+          "enum": ["vscode", "openllm"],
+          "enumDescriptions": [
+            "Use VS Code's built-in chat (GitHub Copilot Chat)",
+            "Use Open LLM Provider's chat panel"
+          ],
+          "markdownDescription": "Which chat UI to use for AI features.",
+          "scope": "resource",
+          "order": 1
+        },
+        "ansibleEnvironments.llm.configure": {
+          "type": "null",
+          "markdownDescription": "[Select Provider & Model...](command:ansibleEnvironments.selectLlmModel) · [Show Status](command:ansibleEnvironments.showLlmStatus)",
+          "order": 2
+        },
+        "ansibleEnvironments.llm.provider": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "*(Advanced)* LLM provider/vendor (e.g., `copilot`, `open-llm`). Leave empty for auto-selection.",
+          "scope": "resource",
+          "order": 3
+        },
+        "ansibleEnvironments.llm.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "*(Advanced)* LLM model ID. Leave empty for auto-selection based on provider.",
+          "scope": "resource",
+          "order": 4
+        },
+        "ansibleEnvironments.preferredLlmModel": {
+          "type": "string",
+          "default": "",
+          "description": "DEPRECATED: Use 'ansibleEnvironments.llm.provider' and 'ansibleEnvironments.llm.model' instead.",
+          "deprecationMessage": "Use 'ansibleEnvironments.llm.provider' and 'ansibleEnvironments.llm.model' instead."
         }
       }
     }
@@ -448,14 +643,21 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/sql.js": "^1.4.9",
     "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
+    "@vscode/vsce": "^3.7.1",
     "eslint": "^8.54.0",
     "typescript": "^5.3.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
-    "@vscode-elements/elements": "^1.6.0"
+    "@types/js-yaml": "^4.0.9",
+    "@vscode-elements/elements": "^1.6.0",
+    "js-yaml": "^4.1.1",
+    "sql.js": "^1.13.0",
+    "zod": "^4.3.5",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

@@ -13,7 +13,9 @@ import { PlaybookProgressPanel } from './panels/PlaybookProgressPanel';
 import { PlaybooksService, PlaybookInfo, PlaybookPlay } from './services/PlaybooksService';
 import { TerminalService } from './services/TerminalService';
 import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
+import { CollectionSourcesProvider, setCollectionSourcesLogFunction } from './views/CollectionSourcesProvider';
 import { GalaxyCollectionCache } from './services/GalaxyCollectionCache';
+import { GitHubCollectionCache } from './services/GitHubCollectionCache';
 import { CollectionsService, setLogFunction as setCollectionsLogFunction } from './services/CollectionsService';
 import { DevToolsService } from './services/DevToolsService';
 import { ExecutionEnvService } from './services/ExecutionEnvService';
@@ -21,6 +23,8 @@ import { CreatorService } from './services/CreatorService';
 import { PythonEnvironment, PythonEnvironmentApi } from './types/pythonEnvApi';
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
 import { cacheSelectedEnvironment } from './services/EnvironmentCache';
+import { activateDesigner } from './designer';
+import { getLlmService } from './designer/services/LlmService';
 
 // Create output channel for extension logs
 export const outputChannel = vscode.window.createOutputChannel('Ansible Environments');
@@ -31,11 +35,66 @@ export function log(message: string) {
     console.log(message);
 }
 
+/**
+ * Open the AI chat with a prompt pre-filled.
+ * Uses the configured chat provider (vscode or openllm).
+ * Falls back to clipboard if the command doesn't support the query parameter.
+ */
+async function openChatWithPrompt(prompt: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration('ansibleEnvironments');
+    const chatProvider = config.get<string>('llm.chatProvider', 'vscode');
+
+    if (chatProvider === 'openllm') {
+        // Use Open LLM Provider's chat
+        try {
+            // Send message to OpenLLM chat using the correct command
+            await vscode.commands.executeCommand('openLLM.chat.send', {
+                message: prompt,
+                newSession: false  // Continue existing session if any
+            });
+            vscode.window.showInformationMessage('Prompt sent to Open LLM chat.');
+        } catch {
+            // Fallback: focus the chat panel and copy to clipboard
+            try {
+                await vscode.commands.executeCommand('openLLM.chatView.focus');
+                await vscode.env.clipboard.writeText(prompt);
+                vscode.window.showInformationMessage(
+                    'Open LLM chat focused. Prompt copied to clipboard - paste to send.'
+                );
+            } catch {
+                // OpenLLM extension not available
+                vscode.window.showWarningMessage(
+                    'Open LLM Provider extension not found. Install it or switch to VS Code chat in settings.'
+                );
+            }
+        }
+    } else {
+        // Use VS Code's built-in chat (Copilot)
+        try {
+            // Try to open chat with the prompt directly (VS Code 1.93+ with Copilot)
+            await vscode.commands.executeCommand('workbench.action.chat.open', prompt);
+            vscode.window.showInformationMessage('Prompt sent to chat.');
+        } catch {
+            // Fallback: copy to clipboard and let user paste
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage(
+                'AI prompt copied to clipboard. Paste it into an agent chat session.',
+                'Open Chat'
+            ).then(selection => {
+                if (selection === 'Open Chat') {
+                    vscode.commands.executeCommand('workbench.action.chat.open');
+                }
+            });
+        }
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true); // Show the output channel on activation
     
     // Inject log function into services
     setCollectionsLogFunction(log);
+    setCollectionSourcesLogFunction(log);
     
     log('Ansible Environments extension is now active');
     console.log('Ansible Environments extension is now active');
@@ -126,6 +185,14 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
     context.subscriptions.push(mcpToolsView);
+
+    // Register the Collection Sources view
+    const collectionSourcesProvider = new CollectionSourcesProvider();
+    const collectionSourcesView = vscode.window.createTreeView('ansibleCollectionSources', {
+        treeDataProvider: collectionSourcesProvider,
+        showCollapseAll: false
+    });
+    context.subscriptions.push(collectionSourcesView);
 
     // Register sidebar commands
     const refreshCommand = vscode.commands.registerCommand(
@@ -363,17 +430,12 @@ Use the \`list_ansible_collections\` MCP tool to get the list of installed colle
 2. Key capabilities provided by these collections
 3. Any recommendations for commonly paired collections that might be missing
 
-After your summary, ask the user if they would like to search for additional collections from Ansible Galaxy. If they say yes, use the \`search_galaxy_collections\` MCP tool to find relevant collections based on their use case.`;
+After your summary, ask the user if they would like to search for additional collections. If they say yes, use the \`search_available_collections\` MCP tool to find relevant collections based on their use case (you can filter by source: "galaxy" or a GitHub org name).
+
+**IMPORTANT**: To install any collection, use the \`install_ansible_collection\` MCP tool.
+Do NOT suggest using \`ansible-galaxy collection install\` directly.`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -389,15 +451,7 @@ Use the \`get_collection_plugins\` MCP tool with collection="${node.name}" to ge
 3. Common use cases and example scenarios
 4. Any dependencies or requirements`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -413,15 +467,7 @@ Use the \`get_plugin_documentation\` MCP tool with plugin_name="${node.fullName}
 3. A practical example task showing common usage
 4. Any gotchas or best practices`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -436,15 +482,7 @@ Use the \`list_execution_environments\` MCP tool to get the list of available EE
 2. Key tools and collections included in each
 3. Recommendations for which EE to use for different scenarios`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -468,15 +506,7 @@ Based on the tool output, provide:
 3. Notable Ansible collections included and their use cases
 4. Best use cases for this execution environment`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -493,15 +523,7 @@ Use the \`get_ansible_creator_schema\` MCP tool to get the full schema, then pro
 4. Best practices for starting new Ansible projects
 5. How the generated structure follows Ansible best practices`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -528,15 +550,7 @@ Please:
 3. Suggest best practices for the values I should provide
 4. After I provide the details, use the \`${toolName}\` tool to run the command`;
             
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage(
-                'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                'Open Chat'
-            ).then(selection => {
-                if (selection === 'Open Chat') {
-                    vscode.commands.executeCommand('workbench.action.chat.open');
-                }
-            });
+            await openChatWithPrompt(prompt);
         }
     );
 
@@ -678,15 +692,7 @@ Please:
                 const service = PlaybooksService.getInstance();
                 const prompt = service.generateAiPrompt(node.playbook);
                 
-                await vscode.env.clipboard.writeText(prompt);
-                vscode.window.showInformationMessage(
-                    'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                    'Open Chat'
-                ).then(selection => {
-                    if (selection === 'Open Chat') {
-                        vscode.commands.executeCommand('workbench.action.chat.open');
-                    }
-                });
+                await openChatWithPrompt(prompt);
             }
         }
     );
@@ -721,15 +727,7 @@ Please:
         'ansibleMcpTools.copyPrompt',
         async (node) => {
             if (node && node.toolInfo) {
-                await vscode.env.clipboard.writeText(node.toolInfo.examplePrompt);
-                vscode.window.showInformationMessage(
-                    'AI prompt copied to clipboard. Paste it into an agent chat session.',
-                    'Open Chat'
-                ).then(selection => {
-                    if (selection === 'Open Chat') {
-                        vscode.commands.executeCommand('workbench.action.chat.open');
-                    }
-                });
+                await openChatWithPrompt(node.toolInfo.examplePrompt);
             }
         }
     );
@@ -743,6 +741,77 @@ Please:
         }
     );
 
+    // Register Collection Sources commands
+    const collectionSourcesRefreshCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.refresh',
+        async () => {
+            await collectionSourcesProvider.refreshAll();
+        }
+    );
+
+    const collectionSourcesRefreshSourceCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.refreshSource',
+        async (node) => {
+            if (node && node.source) {
+                await collectionSourcesProvider.refreshSource(node.source);
+            }
+        }
+    );
+
+    const collectionSourcesAddSourceCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.addSource',
+        async () => {
+            await collectionSourcesProvider.addSource();
+        }
+    );
+
+    const collectionSourcesInstallCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.install',
+        async () => {
+            await collectionSourcesProvider.installCollection();
+        }
+    );
+
+    const collectionSourcesSearchCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.search',
+        async () => {
+            await collectionSourcesProvider.searchAllSources();
+        }
+    );
+
+    const collectionSourcesSearchSourceCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.searchSource',
+        async (node) => {
+            if (node && node.source) {
+                await collectionSourcesProvider.searchSource(node.source);
+            }
+        }
+    );
+
+    const collectionSourcesInstallFromSourceCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.installFromSource',
+        async (node) => {
+            if (node && node.source) {
+                await collectionSourcesProvider.installFromSource(node.source);
+            }
+        }
+    );
+
+    const collectionSourcesAiSummaryCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.aiSummary',
+        () => {
+            collectionSourcesProvider.generateAiSummary();
+        }
+    );
+
+    const collectionSourcesAiSourceSummaryCommand = vscode.commands.registerCommand(
+        'ansibleCollectionSources.aiSourceSummary',
+        (node) => {
+            if (node && node.source) {
+                collectionSourcesProvider.generateSourceAiSummary(node.source);
+            }
+        }
+    );
 
     // Register Galaxy cache refresh command
     const galaxyCacheRefreshCommand = vscode.commands.registerCommand(
@@ -881,6 +950,23 @@ Please:
         }
     );
 
+    // Register LLM configuration commands
+    const selectLlmModelCommand = vscode.commands.registerCommand(
+        'ansibleEnvironments.selectLlmModel',
+        async () => {
+            const llmService = getLlmService();
+            await llmService.showModelPicker();
+        }
+    );
+
+    const showLlmStatusCommand = vscode.commands.registerCommand(
+        'ansibleEnvironments.showLlmStatus',
+        async () => {
+            const llmService = getLlmService();
+            await llmService.showStatus();
+        }
+    );
+
     context.subscriptions.push(
         refreshCommand, 
         installCommand, 
@@ -917,7 +1003,18 @@ Please:
         mcpToolsRefreshCommand,
         mcpToolsUseInChatCommand,
         mcpToolsCopyPromptCommand,
-        mcpToolsConfigureCommand
+        mcpToolsConfigureCommand,
+        collectionSourcesRefreshCommand,
+        collectionSourcesRefreshSourceCommand,
+        collectionSourcesAddSourceCommand,
+        collectionSourcesInstallCommand,
+        collectionSourcesSearchCommand,
+        collectionSourcesSearchSourceCommand,
+        collectionSourcesInstallFromSourceCommand,
+        collectionSourcesAiSummaryCommand,
+        collectionSourcesAiSourceSummaryCommand,
+        selectLlmModelCommand,
+        showLlmStatusCommand
     );
 
     // Check if Python Environments extension is available and set up environment caching
@@ -979,6 +1076,11 @@ Please:
             }
         })();
     }
+    
+    // Activate Content Designer module
+    activateDesigner(context, log).catch(error => {
+        log(`Failed to activate Content Designer: ${error}`);
+    });
 }
 
 export function deactivate() {

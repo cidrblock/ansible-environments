@@ -1,4 +1,3 @@
-import * as cp from 'child_process';
 import * as path from 'path';
 
 // Conditional vscode import - only used when available
@@ -10,7 +9,6 @@ try {
 }
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-import { findExecutableWithCache } from './EnvironmentCache';
 
 // TerminalService is only available in VS Code context - lazy load to avoid
 // breaking the MCP server which runs standalone
@@ -46,13 +44,6 @@ class SimpleEventEmitter<T> {
     public fire(e: T): void {
         this.listeners.forEach(l => l(e));
     }
-}
-
-/**
- * Find an executable - uses cached environment first, then PATH
- */
-async function findExecutable(name: string): Promise<string | null> {
-    return findExecutableWithCache(name);
 }
 
 /**
@@ -230,78 +221,46 @@ export class DevToolsService {
      * Load packages in VS Code mode (uses Python Envs API)
      */
     private async _loadPackagesVSCode(): Promise<void> {
-        await this.initialize();
-
-        if (!this._pythonEnvApi || !vscode) {
-            return;
-        }
-
-        try {
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await this._pythonEnvApi.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                return;
-            }
-
-            const executable = environment.execInfo?.run?.executable;
-            if (!executable) {
-                return;
-            }
-
-            const envBinDir = path.dirname(executable);
-            const adtPath = path.join(envBinDir, 'adt');
-
-            await this._loadPackagesFromAdt(adtPath);
-        } catch (error) {
-            console.error('DevToolsService: Failed to load packages:', error);
-            this._packages = [];
-        }
+        await this._loadPackagesWithCommandService();
     }
 
     /**
      * Load packages in standalone mode (finds tools in PATH)
      */
     private async _loadPackagesStandalone(): Promise<void> {
+        await this._loadPackagesWithCommandService();
+    }
+
+    /**
+     * Common package loading logic using CommandService
+     */
+    private async _loadPackagesWithCommandService(): Promise<void> {
         try {
-            const adtPath = await findExecutable('adt');
-            if (!adtPath) {
-                console.error('DevToolsService: adt not found in PATH');
+            const { getCommandService } = await import('./CommandService');
+            const commandService = getCommandService();
+            
+            const result = await commandService.runTool('adt', ['--version']);
+            
+            if (result.exitCode !== 0) {
+                console.error('DevToolsService: adt not found or failed');
                 this._packages = [];
                 return;
             }
 
-            await this._loadPackagesFromAdt(adtPath);
+            // Parse the adt --version output
+            const packages: DevToolPackage[] = [];
+            const lines = result.stdout.trim().split('\n');
+            for (const line of lines) {
+                const match = line.match(/^(\S+)\s+(\S+)$/);
+                if (match) {
+                    packages.push({ name: match[1], version: match[2] });
+                }
+            }
+
+            this._packages = packages;
         } catch (error) {
             console.error('DevToolsService: Failed to load packages:', error);
             this._packages = [];
         }
-    }
-
-    /**
-     * Common package loading logic
-     */
-    private async _loadPackagesFromAdt(adtPath: string): Promise<void> {
-        const result = await new Promise<string>((resolve, reject) => {
-            cp.exec(`"${adtPath}" --version`, (error, stdout, stderr) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-                resolve(stdout);
-            });
-        });
-
-        // Parse the adt --version output
-        const packages: DevToolPackage[] = [];
-        const lines = result.trim().split('\n');
-        for (const line of lines) {
-            const match = line.match(/^(\S+)\s+(\S+)$/);
-            if (match) {
-                packages.push({ name: match[1], version: match[2] });
-            }
-        }
-
-        this._packages = packages;
     }
 }

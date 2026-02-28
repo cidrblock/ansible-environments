@@ -1,4 +1,3 @@
-import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -36,7 +35,6 @@ interface CollectionsCache {
 }
 
 import { PythonEnvironmentApi, PythonEnvironment } from '../types/pythonEnvApi';
-import { findExecutableWithCache } from './EnvironmentCache';
 
 /**
  * Information about an Ansible collection
@@ -173,38 +171,7 @@ class SimpleEventEmitter<T> {
     }
 }
 
-/**
- * Execute a command and return stdout
- * Note: We return stdout even if there's an error, as ansible-doc often
- * returns non-zero exit codes while still producing valid output
- */
-function execCommand(command: string, options?: { maxBuffer?: number; cwd?: string }): Promise<string> {
-    return new Promise((resolve, reject) => {
-        cp.exec(command, {
-            maxBuffer: options?.maxBuffer || 10 * 1024 * 1024,
-            cwd: options?.cwd,
-        }, (error, stdout, stderr) => {
-            // If we have stdout, return it even if there was an error
-            // (ansible-doc often exits non-zero but produces valid JSON)
-            if (stdout && stdout.trim()) {
-                resolve(stdout);
-                return;
-            }
-            if (error) {
-                reject(new Error(`Command failed: ${error.message}\nStderr: ${stderr}`));
-                return;
-            }
-            resolve(stdout);
-        });
-    });
-}
-
-/**
- * Find an executable - uses cached environment first, then PATH
- */
-async function findExecutable(name: string): Promise<string | null> {
-    return findExecutableWithCache(name);
-}
+// Command execution is now handled by CommandService
 
 /**
  * Get the workspace root directory
@@ -543,6 +510,30 @@ export class CollectionsService {
     }
     
     /**
+     * Force a fresh refresh of collections, bypassing cache
+     * Use this when you need the absolute latest collection data
+     */
+    public async forceRefresh(): Promise<void> {
+        this._log('Force refresh requested - doing full load');
+        this._loading = true;
+        (this._onDidChange as { fire: () => void }).fire();
+
+        try {
+            await this._doFullLoad();
+            this._loaded = true;
+            
+            // Save to cache
+            writeCollectionsCache(this._collections);
+            this._log(`Force refresh complete, ${this._collections.size} collections cached`);
+        } catch (error) {
+            this._log(`Force refresh failed: ${error}`);
+        } finally {
+            this._loading = false;
+            (this._onDidChange as { fire: () => void }).fire();
+        }
+    }
+    
+    /**
      * Perform a full load of collections
      */
     private async _doFullLoad(): Promise<void> {
@@ -634,47 +625,25 @@ export class CollectionsService {
      */
     public async getPluginDocumentation(pluginFullName: string, pluginType: string): Promise<PluginData | null> {
         const typeFlag = this._getTypeFlag(pluginType);
-        let ansibleDocPath: string;
-
-        if (vscode && this._pythonEnvApi) {
-            // VS Code mode - use Python environment
-            await this.initialize();
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await this._pythonEnvApi.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                throw new Error('No Python environment selected');
-            }
-
-            const executable = environment.execInfo?.run?.executable;
-            if (!executable) {
-                throw new Error('Could not find Python executable');
-            }
-
-            ansibleDocPath = path.join(path.dirname(executable), 'ansible-doc');
-        } else {
-            // Standalone mode - find in PATH
-            const found = await findExecutable('ansible-doc');
-            if (!found) {
-                throw new Error('ansible-doc not found in PATH');
-            }
-            ansibleDocPath = found;
-        }
+        
+        const { getCommandService } = await import('./CommandService');
+        const commandService = getCommandService();
 
         try {
-            const result = await execCommand(
-                `ANSIBLE_NOCOLOR=1 "${ansibleDocPath}" ${typeFlag} "${pluginFullName}" --json 2>/dev/null`,
-                { maxBuffer: 10 * 1024 * 1024 }
-            );
+            const result = await commandService.runTool('ansible-doc', [typeFlag, `"${pluginFullName}"`, '--json'], {
+                env: { ANSIBLE_NOCOLOR: '1' }
+            });
+            
+            const output = result.stdout;
 
             // Find the start of JSON (ansible-doc might output warnings before the JSON)
-            const jsonStart = result.indexOf('{');
+            const jsonStart = output.indexOf('{');
             if (jsonStart === -1) {
                 console.error(`No JSON found in ansible-doc output for ${pluginFullName}`);
                 return null;
             }
             
-            const jsonStr = result.substring(jsonStart);
+            const jsonStr = output.substring(jsonStart);
             const data = JSON.parse(jsonStr);
             return data[pluginFullName] as PluginData || null;
         } catch (error) {
@@ -687,49 +656,119 @@ export class CollectionsService {
      * Install a collection using ade install
      * Runs as a background process and returns output when complete
      */
-    public async installCollection(collectionName: string): Promise<string> {
-        // Initialize first to get the Python environment API
-        await this.initialize();
+    /**
+     * Install an Ansible collection from Galaxy
+     * 
+     * @param collectionName - FQCN of the collection (e.g., "community.docker")
+     * @param version - Optional version to install (e.g., "1.0.0")
+     * @param force - If true, force reinstall/upgrade
+     */
+    public async installCollection(collectionName: string, version?: string, force?: boolean): Promise<string> {
+        const { getCommandService } = await import('./CommandService');
+        const commandService = getCommandService();
         
-        let adePath: string;
-        let cwd: string | undefined;
+        // Build collection spec with optional version
+        const collectionSpec = version ? `${collectionName}:${version}` : collectionName;
         
-        if (vscode && this._pythonEnvApi) {
-            // VS Code mode - get ade from the venv
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const environment = await this._pythonEnvApi.getEnvironment(workspaceFolder);
-
-            if (!environment) {
-                throw new Error('No Python environment selected');
-            }
-
-            const executable = environment.execInfo?.run?.executable;
-            if (!executable) {
-                throw new Error('Could not find Python executable');
-            }
-
-            const envBinDir = path.dirname(executable);
-            adePath = path.join(envBinDir, 'ade');
-            cwd = workspaceFolder?.fsPath;
+        // Build args - use --force for upgrades/reinstalls
+        const args = ['install', collectionSpec];
+        if (force) {
+            args.push('--force');
+        }
+        
+        const result = await commandService.runTool('ade', args);
+        
+        if (result.exitCode === 0) {
+            // Trigger a refresh to pick up the newly installed collection
+            // This will fire onDidChange event to notify consumers (e.g., PluginSearchIndex)
+            await this.forceRefresh();
+            
+            return result.stdout || `Successfully installed ${collectionName}`;
         } else {
-            // Standalone mode - find ade in PATH
-            const found = await findExecutable('ade');
-            if (!found) {
-                throw new Error('ade not found. Install ansible-dev-tools first.');
-            }
-            adePath = found;
+            throw new Error(`Failed to install ${collectionName}: ${result.stderr}`);
         }
+    }
 
-        // Run ade install as a background process
+    /**
+     * List all installed Ansible collections
+     * 
+     * @returns Array of installed collections with version info
+     */
+    public async listInstalledCollections(): Promise<CollectionInfo[]> {
+        const { getCommandService } = await import('./CommandService');
+        const commandService = getCommandService();
+        const collections: CollectionInfo[] = [];
+        
         try {
-            const output = await execCommand(
-                `"${adePath}" install ${collectionName}`,
-                { maxBuffer: 10 * 1024 * 1024, cwd }
+            const result = await commandService.runTool('ansible-galaxy', 
+                ['collection', 'list', '--format', 'json']
             );
-            return output || `Successfully installed ${collectionName}`;
+            
+            if (result.exitCode === 0 && result.stdout) {
+                try {
+                    // The output may contain warnings and version info before the JSON
+                    // We need to extract just the JSON part (starts with '{' and ends with '}')
+                    const stdout = result.stdout;
+                    const jsonStart = stdout.indexOf('{');
+                    const jsonEnd = stdout.lastIndexOf('}');
+                    
+                    if (jsonStart === -1 || jsonEnd === -1) {
+                        console.error('CollectionsService: No JSON object found in output');
+                        return collections;
+                    }
+                    
+                    const jsonStr = stdout.substring(jsonStart, jsonEnd + 1);
+                    const parsed = JSON.parse(jsonStr);
+                    
+                    // Format is { "path": { "namespace.name": { "version": "x.y.z" } } }
+                    // Use a Set to deduplicate collections that appear in multiple paths
+                    const seen = new Set<string>();
+                    
+                    for (const pathCollections of Object.values(parsed)) {
+                        if (typeof pathCollections === 'object' && pathCollections !== null) {
+                            for (const [name, info] of Object.entries(pathCollections as Record<string, { version: string }>)) {
+                                if (info && typeof info === 'object' && 'version' in info) {
+                                    // Skip duplicates and internal collections
+                                    if (seen.has(name) || name.startsWith('ansible._')) {
+                                        continue;
+                                    }
+                                    seen.add(name);
+                                    collections.push({
+                                        name,
+                                        version: info.version,
+                                        authors: [],
+                                        description: ''
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    console.log(`CollectionsService: Found ${collections.length} installed collections`);
+                } catch (parseError) {
+                    console.error('CollectionsService: Failed to parse JSON:', parseError);
+                    console.error('CollectionsService: stdout was:', result.stdout.substring(0, 500));
+                    // Fallback: try line-by-line parsing for non-JSON output
+                    const lines = result.stdout.split('\n');
+                    for (const line of lines) {
+                        const match = line.match(/^(\w+\.\w+)\s+([\d.]+)/);
+                        if (match) {
+                            collections.push({
+                                name: match[1],
+                                version: match[2],
+                                authors: [],
+                                description: ''
+                            });
+                        }
+                    }
+                }
+            } else {
+                console.error('CollectionsService: ansible-galaxy command failed:', result.stderr);
+            }
         } catch (error) {
-            throw new Error(`Failed to install ${collectionName}: ${error}`);
+            console.error('CollectionsService: Failed to list installed collections:', error);
         }
+        
+        return collections;
     }
 
     private _getTypeFlag(pluginType: string): string {
@@ -760,30 +799,7 @@ export class CollectionsService {
      * @param targetMap - Optional map to load into (for background refresh)
      */
     private async _loadCollectionsVSCode(targetMap?: Map<string, CollectionData>): Promise<void> {
-        await this.initialize();
-
-        if (!this._pythonEnvApi || !vscode) {
-            return;
-        }
-
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-        const environment = await this._pythonEnvApi.getEnvironment(workspaceFolder);
-
-        if (!environment) {
-            return;
-        }
-
-        const executable = environment.execInfo?.run?.executable;
-        if (!executable) {
-            return;
-        }
-
-        const envBinDir = path.dirname(executable);
-        const envPath = path.dirname(envBinDir);
-        const ansibleDocPath = path.join(envBinDir, 'ansible-doc');
-        const adePath = path.join(envBinDir, 'ade');
-
-        await this._loadCollectionsWithPaths(ansibleDocPath, adePath, envPath, targetMap);
+        await this._loadCollectionsWithCommandService(targetMap);
     }
 
     /**
@@ -791,55 +807,60 @@ export class CollectionsService {
      * @param targetMap - Optional map to load into (for background refresh)
      */
     private async _loadCollectionsStandalone(targetMap?: Map<string, CollectionData>): Promise<void> {
-        const ansibleDocPath = await findExecutable('ansible-doc');
-        if (!ansibleDocPath) {
-            console.error('ansible-doc not found in PATH');
-            return;
-        }
-
-        const adePath = await findExecutable('ade');
-        // ade is optional for basic functionality
-
-        await this._loadCollectionsWithPaths(ansibleDocPath, adePath || undefined, undefined, targetMap);
+        await this._loadCollectionsWithCommandService(targetMap);
     }
 
     /**
-     * Common collection loading logic
+     * Common collection loading logic using CommandService
      * @param targetMap - Optional map to load into (defaults to this._collections)
      */
-    private async _loadCollectionsWithPaths(
-        ansibleDocPath: string, 
-        adePath?: string, 
-        envPath?: string,
-        targetMap?: Map<string, CollectionData>
-    ): Promise<void> {
+    private async _loadCollectionsWithCommandService(targetMap?: Map<string, CollectionData>): Promise<void> {
+        const { getCommandService } = await import('./CommandService');
+        const commandService = getCommandService();
+        
         const collections = targetMap ?? this._collections;
         try {
             // Run ade inspect and ansible-doc in parallel for speed
-            const adePromise = adePath ? (async () => {
+            const adePromise = (async () => {
                 try {
-                    const adeCmd = envPath 
-                        ? `"${adePath}" inspect --venv "${envPath}" --no-ansi`
-                        : `"${adePath}" inspect --no-ansi`;
+                    // Get venv path for ade inspect if available
+                    const binDir = await commandService.getBinDir();
+                    const envPath = binDir ? path.dirname(binDir) : undefined;
                     
-                    const adeResult = await execCommand(adeCmd, { maxBuffer: 10 * 1024 * 1024 });
-                    return JSON.parse(adeResult) as AdeInspectOutput;
+                    const args = envPath 
+                        ? ['inspect', '--venv', envPath, '--no-ansi']
+                        : ['inspect', '--no-ansi'];
+                    
+                    const result = await commandService.runTool('ade', args);
+                    if (result.exitCode === 0 && result.stdout) {
+                        return JSON.parse(result.stdout) as AdeInspectOutput;
+                    }
+                    return null;
                 } catch (error) {
                     console.error('CollectionsService: ade inspect not available, collection metadata will be limited');
                     return null;
                 }
-            })() : Promise.resolve(null);
+            })();
 
             // Set ANSIBLE_COLLECTIONS_PATH=. to isolate to workspace
             // ansible-doc still finds venv site-packages collections via Python's sys.path
             // This prevents picking up stray collections from ~/.ansible/collections
-            const ansibleDocPromise = execCommand(
-                `ANSIBLE_COLLECTIONS_PATH=. ANSIBLE_WARNINGS=false ANSIBLE_NOCOLOR=1 "${ansibleDocPath}" --metadata-dump --no-fail-on-errors 2>/dev/null`,
-                { maxBuffer: 50 * 1024 * 1024 }
+            const ansibleDocPromise = commandService.runTool(
+                'ansible-doc', 
+                ['--metadata-dump', '--no-fail-on-errors'],
+                { 
+                    env: { 
+                        ANSIBLE_COLLECTIONS_PATH: '.', 
+                        ANSIBLE_WARNINGS: 'false', 
+                        ANSIBLE_NOCOLOR: '1' 
+                    },
+                    maxBuffer: 50 * 1024 * 1024 
+                }
             );
 
             // Wait for both to complete
-            const [adeData, result] = await Promise.all([adePromise, ansibleDocPromise]);
+            const [adeData, ansibleDocResult] = await Promise.all([adePromise, ansibleDocPromise]);
+            const result = ansibleDocResult.stdout;
 
             // Build collection info map from ade data
             const collectionInfoMap = new Map<string, CollectionInfo>();

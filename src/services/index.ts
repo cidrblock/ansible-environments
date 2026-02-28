@@ -31,5 +31,11 @@ export type { ParameterSchema, SchemaNode } from './CreatorService';
 export { GalaxyCollectionCache } from './GalaxyCollectionCache';
 export type { GalaxyCollection } from './GalaxyCollectionCache';
 
+export { GitHubCollectionCache } from './GitHubCollectionCache';
+export type { GitHubCollection } from './GitHubCollectionCache';
+
 export { TerminalService } from './TerminalService';
 export type { CommandResult, ManagedTerminal, SendCommandOptions, CreateTerminalOptions } from './TerminalService';
+
+export { CommandService, getCommandService } from './CommandService';
+export type { ExecResult, CommandOptions } from './CommandService';

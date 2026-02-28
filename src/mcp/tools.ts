@@ -4,6 +4,8 @@
  * These define the tools available to AI agents via the MCP protocol.
  */
 
+import { GET_BEST_PRACTICES_TOOL } from '../designer/mcp/designerTools';
+
 export interface McpToolDefinition {
     name: string;
     description: string;
@@ -114,18 +116,17 @@ Examples:
     }
 };
 
-export const SEARCH_GALAXY_COLLECTIONS_TOOL: McpToolDefinition = {
-    name: 'search_galaxy_collections',
-    description: `Search Ansible Galaxy for collections by keyword.
+export const SEARCH_AVAILABLE_COLLECTIONS_TOOL: McpToolDefinition = {
+    name: 'search_available_collections',
+    description: `Search for available Ansible collections by keyword across all configured sources.
 
-Searches the full Galaxy catalog (~4000+ collections) to find relevant collections.
+Searches Ansible Galaxy (~4000+ collections) and configured GitHub organizations to find relevant collections.
 Use this to discover collections for specific use cases before installing them.
 
 Examples:
-- search_galaxy_collections({ query: "kubernetes" }) → finds k8s-related collections
-- search_galaxy_collections({ query: "cisco" }) → finds Cisco network collections
-- search_galaxy_collections({ query: "aws" }) → finds AWS cloud collections
-- search_galaxy_collections({ query: "windows" }) → finds Windows management collections`,
+- search_available_collections({ query: "kubernetes" }) → finds k8s-related collections from all sources
+- search_available_collections({ query: "cisco", source: "galaxy" }) → finds Cisco collections from Galaxy only
+- search_available_collections({ query: "aap", source: "redhat-cop" }) → finds AAP collections from redhat-cop GitHub org`,
     inputSchema: {
         type: 'object',
         properties: {
@@ -133,12 +134,42 @@ Examples:
                 type: 'string',
                 description: 'Search terms (e.g., "kubernetes", "cisco", "aws", "vmware")'
             },
+            source: {
+                type: 'string',
+                description: 'Optional: limit to a specific source ("galaxy" or a GitHub org name like "redhat-cop")'
+            },
             limit: {
                 type: 'number',
                 description: 'Maximum results (default: 20, max: 100)'
             }
         },
         required: ['query']
+    }
+};
+
+export const LIST_SOURCE_COLLECTIONS_TOOL: McpToolDefinition = {
+    name: 'list_source_collections',
+    description: `List all collections from a specific source (Galaxy or GitHub org).
+
+Use this to get a complete list of collections from a source before summarizing.
+
+Examples:
+- list_source_collections({ source: "galaxy" }) → all Galaxy collections
+- list_source_collections({ source: "redhat-cop" }) → all collections from redhat-cop GitHub org
+- list_source_collections({ source: "ansible-collections" }) → all collections from ansible-collections GitHub org`,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            source: {
+                type: 'string',
+                description: 'Source to list: "galaxy" or a GitHub org name'
+            },
+            limit: {
+                type: 'number',
+                description: 'Maximum results (default: 100, max: 500)'
+            }
+        },
+        required: ['source']
     }
 };
 
@@ -422,6 +453,110 @@ export const GET_CREATOR_SCHEMA_TOOL: McpToolDefinition = {
     }
 };
 
+// === Content Designer ===
+
+export const QUERY_DESIGN_DB_TOOL: McpToolDefinition = {
+    name: 'query_design_db',
+    description: `Execute a read-only SQL query against the Content Designer database.
+
+This tool provides AI agents with access to project requirements, design decisions,
+implementation plans, and build status. Use it to understand the current state of
+the Ansible content project and make informed suggestions.
+
+**Security**: Only SELECT queries are allowed. INSERT/UPDATE/DELETE are blocked.
+
+**Available Tables**:
+- project: Project metadata (name, namespace, type, phase)
+- requirements: User requirements with constrained IDs (REQ-001)
+- requirement_artifacts: Artifact types per requirement
+- requirement_tags: Tags for requirements
+- design_decisions: Assessment Q&A for each requirement
+- project_decisions: Project-wide decisions
+- plan_items: Implementation plan items (ITEM-001)
+- build_steps: Build progress substeps
+- artifacts: Generated files
+- phase_progress: Workflow progress for each phase
+- sign_offs: Phase approvals
+- drift_assessments: Compliance checks
+- drift_findings: Individual drift issues
+- history: Audit log of all actions
+
+**Example Queries**:
+- Get all requirements: SELECT * FROM requirements
+- Get pending questions: SELECT * FROM design_decisions WHERE answer IS NULL
+- Get plan items for a requirement: SELECT * FROM plan_items WHERE requirement_id = 'REQ-001'
+- Get build progress: SELECT * FROM phase_progress
+- Get recent history: SELECT * FROM history ORDER BY timestamp DESC LIMIT 10`,
+    inputSchema: {
+        type: 'object',
+        required: ['query'],
+        properties: {
+            query: {
+                type: 'string',
+                description: 'SQL SELECT query to execute. Only SELECT statements are allowed.'
+            },
+            limit: {
+                type: 'number',
+                description: 'Maximum number of rows to return (default: 100, max: 1000)'
+            }
+        }
+    }
+};
+
+// === Content Designer Tools ===
+
+export const GET_REQUIREMENTS_TOOL: McpToolDefinition = {
+    name: 'get_project_requirements',
+    description: `Get requirements and operational guidance from the Content Designer project.
+
+Returns TWO types of items:
+1. **User Requirements (REQ-XXX)**: What the user wants to build. Generate questions/content for these.
+2. **System Guidance (SYS-XXX)**: Operational instructions for YOU (the agent). Follow these as workflow guidance, do NOT generate questions for them.
+
+The SYS-* entries are ordered as a workflow (SYS-001, SYS-002, etc.) - follow them in sequence.
+
+Use include_system: true to get both types. Read SYS-* for your instructions, work on REQ-* as the actual requirements.`,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            include_system: {
+                type: 'boolean',
+                description: 'Include system guidance (SYS-XXX). Set to true to get your operational instructions. Default: false'
+            },
+            status_filter: {
+                type: 'string',
+                description: 'Filter by status (draft, assessed, planned, building, complete)'
+            }
+        }
+    }
+};
+
+export const GET_DESIGN_DECISIONS_TOOL: McpToolDefinition = {
+    name: 'get_design_decisions',
+    description: `Get design decisions (assessment Q&A) from the Content Designer project.
+
+Returns answered and unanswered questions from the assessment phase, grouped by requirement.
+Use this to understand what decisions have been made about architecture, security, dependencies, etc.`,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            requirement_id: {
+                type: 'string',
+                description: 'Filter by specific requirement ID (e.g., REQ-001)'
+            },
+            stage: {
+                type: 'string',
+                description: 'Filter by assessment stage: "dependencies" or "content"',
+                enum: ['dependencies', 'content']
+            },
+            answered_only: {
+                type: 'boolean',
+                description: 'Only return answered questions. Default: false'
+            }
+        }
+    }
+};
+
 // === Collection of all static tools ===
 
 export const STATIC_TOOLS: McpToolDefinition[] = [
@@ -430,7 +565,8 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     GET_PLUGIN_DOC_TOOL,
     LIST_COLLECTIONS_TOOL,
     INSTALL_COLLECTION_TOOL,
-    SEARCH_GALAXY_COLLECTIONS_TOOL,
+    SEARCH_AVAILABLE_COLLECTIONS_TOOL,
+    LIST_SOURCE_COLLECTIONS_TOOL,
     GET_COLLECTION_PLUGINS_TOOL,
     
     // Task generation
@@ -447,4 +583,10 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     
     // Creator
     GET_CREATOR_SCHEMA_TOOL,
+    
+    // Content Designer
+    QUERY_DESIGN_DB_TOOL,
+    GET_REQUIREMENTS_TOOL,
+    GET_DESIGN_DECISIONS_TOOL,
+    GET_BEST_PRACTICES_TOOL as unknown as McpToolDefinition,
 ];

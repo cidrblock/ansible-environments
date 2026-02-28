@@ -46,8 +46,8 @@ export class CreatorToolGenerator {
     }
 
     async handleTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
-        const path = this._toolPathMap.get(name);
-        if (!path) {
+        const toolPath = this._toolPathMap.get(name);
+        if (!toolPath) {
             return {
                 content: [{ type: 'text', text: `Unknown creator tool: ${name}` }],
                 isError: true
@@ -66,23 +66,52 @@ export class CreatorToolGenerator {
             }
         }
 
+        // Always add --overwrite to prevent interactive prompts
+        // This is necessary for automated builds
+        params['overwrite'] = true;
+
+        // Get positional args for this command from the schema
+        const positionalArgs = service.getPositionalArgs(toolPath);
+        const commandStr = service.buildCommandString(toolPath, params, positionalArgs);
+        
+        console.log(`CreatorToolGenerator: Executing ${name}`);
+        console.log(`CreatorToolGenerator: Command: ${commandStr}`);
+        console.log(`CreatorToolGenerator: Positional args: ${positionalArgs.join(', ')}`);
+
         try {
-            await service.runCommand(path, params);
-            
-            const commandStr = `ansible-creator ${path.join(' ')}`;
-            const paramsStr = Object.entries(params)
-                .map(([k, v]) => typeof v === 'boolean' ? `--${k}` : `--${k} "${v}"`)
-                .join(' ');
+            const result = await service.runCommand(toolPath, params, positionalArgs);
+
+            // If running in terminal mode, result is void
+            if (result === undefined) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `[TERMINAL] Running: ${commandStr}\n\nCommand started in VS Code terminal with activated environment.`
+                    }]
+                };
+            }
 
             return {
                 content: [{
                     type: 'text',
-                    text: `✓ Running: ${commandStr} ${paramsStr}\n\nCommand has been started in a terminal.`
+                    text: `[SUCCESS] ${commandStr}\n\nOutput:\n${result || 'Completed successfully.'}`
                 }]
             };
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`CreatorToolGenerator: Error running ${commandStr}: ${errorMessage}`);
+            
+            // Check for common issues
+            let helpText = '';
+            if (errorMessage.includes('command not found') || errorMessage.includes('not found')) {
+                helpText = '\n\n[HINT] ansible-creator was not found. Make sure:\n' +
+                    '1. A Python environment with ansible-creator is configured\n' +
+                    '2. The ms-python.vscode-python-envs extension is installed and active\n' +
+                    '3. Or install it: pip install ansible-creator';
+            }
+            
             return {
-                content: [{ type: 'text', text: `Error: ${error}` }],
+                content: [{ type: 'text', text: `[ERROR] ${commandStr}\n\n${errorMessage}${helpText}` }],
                 isError: true
             };
         }

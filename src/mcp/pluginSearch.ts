@@ -2,6 +2,7 @@
  * Plugin Search Index
  * 
  * Provides fast keyword-based search across all installed Ansible plugins.
+ * Automatically rebuilds when CollectionsService data changes.
  */
 
 import { CollectionsService, PluginInfo } from '../services/CollectionsService';
@@ -18,8 +19,44 @@ export class PluginSearchIndex {
     private static _instance: PluginSearchIndex | undefined;
     private _entries: PluginSearchResult[] = [];
     private _built = false;
+    private _subscribed = false;
 
-    private constructor() {}
+    private constructor() {
+        // Subscribe to CollectionsService changes
+        this._subscribeToChanges();
+    }
+
+    private _subscribeToChanges(): void {
+        if (this._subscribed) {
+            return;
+        }
+        
+        try {
+            const service = CollectionsService.getInstance();
+            const onDidChange = service.onDidChange as { (listener: () => void): { dispose: () => void } } | undefined;
+            
+            if (onDidChange && typeof onDidChange === 'function') {
+                onDidChange(() => {
+                    // Mark as needing rebuild when collections change
+                    console.error('PluginSearchIndex: Collections changed, marking for rebuild');
+                    this._built = false;
+                });
+                this._subscribed = true;
+                console.error('PluginSearchIndex: Subscribed to CollectionsService changes');
+            } else if (service.onDidChange && typeof (service.onDidChange as unknown as { event?: unknown }).event === 'function') {
+                // VS Code EventEmitter style
+                const event = (service.onDidChange as unknown as { event: (listener: () => void) => { dispose: () => void } }).event;
+                event(() => {
+                    console.error('PluginSearchIndex: Collections changed, marking for rebuild');
+                    this._built = false;
+                });
+                this._subscribed = true;
+                console.error('PluginSearchIndex: Subscribed to CollectionsService changes (VS Code style)');
+            }
+        } catch (error) {
+            console.error('PluginSearchIndex: Failed to subscribe to changes:', error);
+        }
+    }
 
     public static getInstance(): PluginSearchIndex {
         if (!PluginSearchIndex._instance) {
