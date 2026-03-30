@@ -26,8 +26,7 @@ import {
 } from '@ansible/core';
 import type { PythonEnvironment, PythonEnvironmentApi } from '@ansible/core';
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
-import { activateDesigner, deactivateDesigner } from './designer';
-import { getLlmService } from './designer/services/LlmService';
+import { getLlmService } from './services/LlmService';
 
 // Create output channel for extension logs
 export const outputChannel = vscode.window.createOutputChannel('Ansible Environments');
@@ -1079,14 +1078,8 @@ Please:
             }
         })();
     }
-    
-    // Activate Content Designer module
-    activateDesigner(context, log).catch(error => {
-        log(`Failed to activate Content Designer: ${error}`);
-    });
 }
 
 export function deactivate() {
-    deactivateDesigner();
     outputChannel.dispose();
 }

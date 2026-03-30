@@ -19,11 +19,6 @@ import {
 } from '@ansible/core';
 import type { PluginOption } from '@ansible/core';
 
-/** Optional Content Designer tool implementation (registered by the VS Code extension). */
-export interface McpDesignerToolHandler {
-    handleTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
-}
-
 // Helper to convert string | string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
     if (!value) { return []; }
@@ -32,35 +27,10 @@ function toArray(value: string | string[] | undefined): string[] {
 }
 
 export class McpToolHandler {
-    private static _designerHandler: McpDesignerToolHandler | undefined;
-
-    /**
-     * Register Content Designer–specific MCP tool handlers (query DB, requirements, decisions).
-     * When unset, those tools return "Content Designer not available".
-     */
-    static setDesignerHandler(handler: McpDesignerToolHandler | undefined): void {
-        McpToolHandler._designerHandler = handler;
-    }
-
     private _searchIndex = PluginSearchIndex.getInstance();
     private _taskGenerator = new TaskGenerator();
     private _taskBuilder = new TaskBuilder();
     private _creatorTools = new CreatorToolGenerator();
-
-    private _designerUnavailable(): McpToolResult {
-        return {
-            content: [{ type: 'text', text: 'Content Designer not available' }],
-            isError: true,
-        };
-    }
-
-    private async _delegateDesignerTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
-        const h = McpToolHandler._designerHandler;
-        if (!h) {
-            return this._designerUnavailable();
-        }
-        return h.handleTool(name, args);
-    }
 
     async initialize(): Promise<void> {
         await this._searchIndex.ensureBuilt();
@@ -118,11 +88,6 @@ export class McpToolHandler {
                 case 'get_ansible_creator_schema':
                     return this._handleGetCreatorSchema();
 
-                // Content Designer (DB-backed tools require extension-registered handler)
-                case 'query_design_db':
-                case 'get_project_requirements':
-                case 'get_design_decisions':
-                    return this._delegateDesignerTool(name, args);
                 case 'get_ansible_best_practices':
                     return this._handleGetBestPractices(args);
 

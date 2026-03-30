@@ -65,7 +65,6 @@ describe('McpToolHandler', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        McpToolHandler.setDesignerHandler(undefined);
         hoisted.getPluginDocumentation.mockResolvedValue({
             doc: {
                 short_description: 'Copy files',
@@ -77,10 +76,6 @@ describe('McpToolHandler', () => {
         });
         handler = new McpToolHandler();
         await handler.initialize();
-    });
-
-    afterEach(() => {
-        McpToolHandler.setDesignerHandler(undefined);
     });
 
     it('returns error for unknown tool name', async () => {
@@ -116,37 +111,6 @@ describe('McpToolHandler', () => {
         expect(result.isError).toBeUndefined();
         expect(result.content[0].text).toContain('```yaml');
         expect(result.content[0].text).toContain('ansible.builtin.copy');
-    });
-
-    it('returns Content Designer not available for designer tools without a registered handler', async () => {
-        for (const name of ['query_design_db', 'get_project_requirements', 'get_design_decisions'] as const) {
-            const args =
-                name === 'query_design_db'
-                    ? { query: 'SELECT 1' }
-                    : name === 'get_design_decisions'
-                      ? {}
-                      : { include_system: false };
-
-            const result = await handler.handleTool(name, args);
-
-            expect(result.isError).toBe(true);
-            expect(result.content[0].text).toBe('Content Designer not available');
-        }
-    });
-
-    it('setDesignerHandler registers a handler for designer tools', async () => {
-        const designerHandleTool = vi.fn().mockResolvedValue({
-            content: [{ type: 'text', text: 'from-designer' }],
-        });
-        McpToolHandler.setDesignerHandler({
-            handleTool: designerHandleTool,
-        });
-
-        await handler.handleTool('get_project_requirements', { include_system: true });
-
-        expect(designerHandleTool).toHaveBeenCalledWith('get_project_requirements', {
-            include_system: true,
-        });
     });
 
     it('routes creator-prefixed tools to CreatorToolGenerator', async () => {

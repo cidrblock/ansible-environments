@@ -18,7 +18,6 @@ export {
     type TaskBuilderResult,
     CreatorToolGenerator,
     McpToolHandler,
-    type McpDesignerToolHandler,
 } from '@ansible/mcp-server';
 export { registerMcpServerProvider, isMcpAvailable } from './vscodeProvider';
 export { configureCursorMcp, showCursorMcpStatus, getMcpStatus, McpStatus, detectIde, IdeType } from './cursorConfig';

@@ -451,109 +451,7 @@ export const GET_CREATOR_SCHEMA_TOOL: McpToolDefinition = {
     }
 };
 
-// === Content Designer ===
-
-export const QUERY_DESIGN_DB_TOOL: McpToolDefinition = {
-    name: 'query_design_db',
-    description: `Execute a read-only SQL query against the Content Designer database.
-
-This tool provides AI agents with access to project requirements, design decisions,
-implementation plans, and build status. Use it to understand the current state of
-the Ansible content project and make informed suggestions.
-
-**Security**: Only SELECT queries are allowed. INSERT/UPDATE/DELETE are blocked.
-
-**Available Tables**:
-- project: Project metadata (name, namespace, type, phase)
-- requirements: User requirements with constrained IDs (REQ-001)
-- requirement_artifacts: Artifact types per requirement
-- requirement_tags: Tags for requirements
-- design_decisions: Assessment Q&A for each requirement
-- project_decisions: Project-wide decisions
-- plan_items: Implementation plan items (ITEM-001)
-- build_steps: Build progress substeps
-- artifacts: Generated files
-- phase_progress: Workflow progress for each phase
-- sign_offs: Phase approvals
-- drift_assessments: Compliance checks
-- drift_findings: Individual drift issues
-- history: Audit log of all actions
-
-**Example Queries**:
-- Get all requirements: SELECT * FROM requirements
-- Get pending questions: SELECT * FROM design_decisions WHERE answer IS NULL
-- Get plan items for a requirement: SELECT * FROM plan_items WHERE requirement_id = 'REQ-001'
-- Get build progress: SELECT * FROM phase_progress
-- Get recent history: SELECT * FROM history ORDER BY timestamp DESC LIMIT 10`,
-    inputSchema: {
-        type: 'object',
-        required: ['query'],
-        properties: {
-            query: {
-                type: 'string',
-                description: 'SQL SELECT query to execute. Only SELECT statements are allowed.'
-            },
-            limit: {
-                type: 'number',
-                description: 'Maximum number of rows to return (default: 100, max: 1000)'
-            }
-        }
-    }
-};
-
-// === Content Designer Tools ===
-
-export const GET_REQUIREMENTS_TOOL: McpToolDefinition = {
-    name: 'get_project_requirements',
-    description: `Get requirements and operational guidance from the Content Designer project.
-
-Returns TWO types of items:
-1. **User Requirements (REQ-XXX)**: What the user wants to build. Generate questions/content for these.
-2. **System Guidance (SYS-XXX)**: Operational instructions for YOU (the agent). Follow these as workflow guidance, do NOT generate questions for them.
-
-The SYS-* entries are ordered as a workflow (SYS-001, SYS-002, etc.) - follow them in sequence.
-
-Use include_system: true to get both types. Read SYS-* for your instructions, work on REQ-* as the actual requirements.`,
-    inputSchema: {
-        type: 'object',
-        properties: {
-            include_system: {
-                type: 'boolean',
-                description: 'Include system guidance (SYS-XXX). Set to true to get your operational instructions. Default: false'
-            },
-            status_filter: {
-                type: 'string',
-                description: 'Filter by status (draft, assessed, planned, building, complete)'
-            }
-        }
-    }
-};
-
-export const GET_DESIGN_DECISIONS_TOOL: McpToolDefinition = {
-    name: 'get_design_decisions',
-    description: `Get design decisions (assessment Q&A) from the Content Designer project.
-
-Returns answered and unanswered questions from the assessment phase, grouped by requirement.
-Use this to understand what decisions have been made about architecture, security, dependencies, etc.`,
-    inputSchema: {
-        type: 'object',
-        properties: {
-            requirement_id: {
-                type: 'string',
-                description: 'Filter by specific requirement ID (e.g., REQ-001)'
-            },
-            stage: {
-                type: 'string',
-                description: 'Filter by assessment stage: "dependencies" or "content"',
-                enum: ['dependencies', 'content']
-            },
-            answered_only: {
-                type: 'boolean',
-                description: 'Only return answered questions. Default: false'
-            }
-        }
-    }
-};
+// === Best Practices ===
 
 export const GET_BEST_PRACTICES_TOOL: McpToolDefinition = {
     name: 'get_ansible_best_practices',
@@ -627,9 +525,6 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     // Creator
     GET_CREATOR_SCHEMA_TOOL,
     
-    // Content Designer
-    QUERY_DESIGN_DB_TOOL,
-    GET_REQUIREMENTS_TOOL,
-    GET_DESIGN_DECISIONS_TOOL,
+    // Best practices
     GET_BEST_PRACTICES_TOOL,
 ];

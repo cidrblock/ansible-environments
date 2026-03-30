@@ -2,7 +2,7 @@
  * @ansible/mcp-server — public API for the Ansible Environments MCP implementation.
  */
 
-export { McpToolHandler, type McpDesignerToolHandler } from './handlers';
+export { McpToolHandler } from './handlers';
 export {
     STATIC_TOOLS,
     type McpToolDefinition,

@@ -84,11 +84,6 @@
           "name": "AI Tools",
           "type": "tree",
           "when": "config.ansibleEnvironments.enableAiFeatures"
-        },
-        {
-          "id": "ansibleContentDesigner",
-          "name": "Content Designer",
-          "type": "tree"
         }
       ]
     },
@@ -316,36 +311,6 @@
         "icon": "$(sparkle)"
       },
       {
-        "command": "ansibleContentDesigner.refresh",
-        "title": "Refresh",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "ansibleContentDesigner.newProject",
-        "title": "New Project",
-        "icon": "$(add)"
-      },
-      {
-        "command": "ansibleContentDesigner.openPhase",
-        "title": "Open Phase"
-      },
-      {
-        "command": "ansibleContentDesigner.signOff",
-        "title": "Sign Off Phase",
-        "icon": "$(check)"
-      },
-      {
-        "command": "ansibleContentDesigner.export",
-        "title": "Export Design",
-        "icon": "$(export)"
-      },
-      {
-        "command": "ansibleContentDesigner.undoBuild",
-        "title": "Undo Build",
-        "category": "Content Designer",
-        "icon": "$(discard)"
-      },
-      {
         "command": "ansibleEnvironments.selectLlmModel",
         "title": "Select LLM Provider & Model",
         "category": "Ansible Environments",
@@ -459,16 +424,6 @@
           "command": "ansibleCollectionSources.aiSummary",
           "when": "view == ansibleCollectionSources && config.ansibleEnvironments.enableAiFeatures",
           "group": "navigation@5"
-        },
-        {
-          "command": "ansibleContentDesigner.newProject",
-          "when": "view == ansibleContentDesigner",
-          "group": "navigation@1"
-        },
-        {
-          "command": "ansibleContentDesigner.refresh",
-          "when": "view == ansibleContentDesigner",
-          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -647,7 +602,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "@types/sql.js": "^1.4.9",
     "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
@@ -663,7 +617,6 @@
     "@types/js-yaml": "^4.0.9",
     "@vscode-elements/elements": "^1.6.0",
     "js-yaml": "^4.1.1",
-    "sql.js": "^1.13.0",
     "zod": "^4.3.5",
     "zod-to-json-schema": "^3.25.1"
   }
