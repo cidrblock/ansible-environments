@@ -88,6 +88,22 @@ describe("EnvironmentCache", () => {
     expect(resolved).toBe(toolPath);
   });
 
+  it("getCachedToolPath returns null when tool file is missing from cached bin", async () => {
+    const binDir = path.join(tmpDir, "emptybin");
+    fs.mkdirSync(binDir, { recursive: true });
+    const { cacheSelectedEnvironment, getCachedToolPath } = await import("../../src/services/EnvironmentCache");
+    cacheSelectedEnvironment(path.join(binDir, "python"));
+    expect(getCachedToolPath("no-such-tool")).toBeNull();
+  });
+
+  it("read invalid JSON yields null from getCachedEnvironment", async () => {
+    const cacheFile = path.join(tmpDir, ".cache", "ansible-environments", "environment.json");
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(cacheFile, "{broken", "utf8");
+    const { getCachedEnvironment } = await import("../../src/services/EnvironmentCache");
+    expect(getCachedEnvironment()).toBeNull();
+  });
+
   it("findExecutableWithCache falls back to PATH via child_process.exec", async () => {
     vi.resetModules();
     process.env.ANSIBLE_ENV_WORKSPACE = tmpDir;

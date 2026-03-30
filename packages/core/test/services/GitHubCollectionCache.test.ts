@@ -334,4 +334,85 @@ description: Parsed from YAML
       expect.stringContaining("Cannot refresh some-org - not in VS Code context"),
     );
   });
+
+  it("_formatAge returns just now, minutes, hours, and days (private API)", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fmt = (svc as any)._formatAge.bind(svc) as (ms: number) => string;
+    expect(fmt(30 * 1000)).toBe("just now");
+    expect(fmt(3 * 60 * 1000)).toBe("3 minutes ago");
+    expect(fmt(2 * 60 * 60 * 1000)).toBe("2 hours ago");
+    expect(fmt(50 * 60 * 60 * 1000)).toMatch(/^\d+ days? ago$/);
+  });
+
+  it("initialize loads each org from disk when cache files exist", async () => {
+    for (const org of ["inita", "initb"]) {
+      fs.writeFileSync(
+        path.join(cacheDir, `github-${org}.json`),
+        JSON.stringify({
+          org,
+          lastUpdated: "2024-01-01T00:00:00.000Z",
+          collections: [
+            {
+              namespace: org,
+              name: "c",
+              version: "1.0.0",
+              description: "",
+              repository: `${org}/c`,
+              org,
+              htmlUrl: `https://github.com/${org}/c`,
+              installUrl: `git+https://github.com/${org}/c.git`,
+            },
+          ],
+        }),
+        "utf-8",
+      );
+    }
+    const svc = GitHubCollectionCache.getInstance();
+    await svc.initialize(["inita", "initb"]);
+    expect(svc.getCount("inita")).toBe(1);
+    expect(svc.getCount("initb")).toBe(1);
+  });
+
+  it("refreshAll invokes refresh for every org (standalone no-ops)", async () => {
+    const log = vi.fn();
+    const svc = GitHubCollectionCache.getInstance();
+    svc.setLogFunction(log);
+    await svc.refreshAll(["a", "b"]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Cannot refresh a - not in VS Code context"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Cannot refresh b - not in VS Code context"));
+  });
+
+  it("getLastUpdated returns a Date instance", () => {
+    const org = "dateinst";
+    const iso = "2025-06-01T00:00:00.000Z";
+    fs.writeFileSync(
+      path.join(cacheDir, `github-${org}.json`),
+      JSON.stringify({ org, collections: [], lastUpdated: iso }),
+      "utf-8",
+    );
+    const svc = GitHubCollectionCache.getInstance();
+    svc.loadFromDisk(org);
+    const d = svc.getLastUpdated(org);
+    expect(d).toBeInstanceOf(Date);
+  });
+
+  it("_parseGalaxyYml handles array description and returns null without namespace", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const yaml = `name: onlyname
+version: 1
+description:
+  - line one
+  - line two
+`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((svc as any)._parseGalaxyYml(yaml, "o/r", "o")).toBeNull();
+    const yaml2 = `namespace: ns
+name: n
+description: [a, b]
+`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const col = (svc as any)._parseGalaxyYml(yaml2, "org/repo", "org");
+    expect(col?.description).toBe("a b");
+  });
 });

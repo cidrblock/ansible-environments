@@ -37,6 +37,33 @@ function installMockGalaxyResponse(body: object): void {
   });
 }
 
+function installMockGalaxySequence(
+  responses: Array<{ statusCode: number; body: string }>,
+): void {
+  let index = 0;
+  httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+    const spec = responses[Math.min(index, responses.length - 1)];
+    if (index < responses.length) {
+      index += 1;
+    }
+    const res = new EventEmitter() as EventEmitter & { statusCode: number };
+    res.statusCode = spec.statusCode;
+
+    const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+    req.destroy = vi.fn();
+
+    queueMicrotask(() => {
+      cb(res);
+      queueMicrotask(() => {
+        res.emit("data", Buffer.from(spec.body, "utf8"));
+        res.emit("end");
+      });
+    });
+
+    return req as ReturnType<typeof import("https").get>;
+  });
+}
+
 describe("GalaxyCollectionCache", () => {
   let tmpDir: string;
 
@@ -203,5 +230,254 @@ describe("GalaxyCollectionCache", () => {
     const parsed = JSON.parse(written) as { timestamp: number; collections: unknown[] };
     expect(parsed.collections).toHaveLength(1);
     expect(typeof parsed.timestamp).toBe("number");
+  });
+
+  it("ensureLoaded is a no-op on second call when already loaded", async () => {
+    const storage = path.join(tmpDir, "globalStorage-idem");
+    fs.mkdirSync(storage, { recursive: true });
+    const cache = {
+      timestamp: Date.now(),
+      collections: [{ namespace: "a", name: "b", version: "1", deprecated: false, downloadCount: 1 }],
+    };
+    fs.writeFileSync(path.join(storage, "galaxy-collections-cache.json"), JSON.stringify(cache), "utf8");
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+
+    await svc.ensureLoaded();
+    await svc.ensureLoaded();
+    expect(httpsGetMock).not.toHaveBeenCalled();
+    expect(svc.getCollections()).toHaveLength(1);
+  });
+
+  it("getCacheAge returns never before load and hour/day strings after API fetch", async () => {
+    resetGalaxySingleton();
+    const storage = path.join(tmpDir, "globalStorage-age");
+    fs.mkdirSync(storage, { recursive: true });
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    expect(svc.getCacheAge()).toBe("never");
+
+    installMockGalaxyResponse({
+      meta: { count: 1 },
+      links: { next: null as string | null },
+      data: [
+        {
+          namespace: "n",
+          name: "c",
+          deprecated: false,
+          download_count: 1,
+          highest_version: { version: "1.0.0" },
+        },
+      ],
+    });
+
+    await svc.forceRefresh();
+    expect(svc.getCacheAge()).toMatch(/just now|hour|day/);
+  });
+
+  it("fetches multiple pages when API returns relative next link", async () => {
+    const storage = path.join(tmpDir, "globalStorage-pages");
+    fs.mkdirSync(storage, { recursive: true });
+
+    const page1 = {
+      meta: { count: 200 },
+      links: { next: "/api/v3/collections/?page=2" },
+      data: [
+        {
+          namespace: "p1",
+          name: "a",
+          deprecated: false,
+          download_count: 10,
+          highest_version: { version: "1.0.0" },
+        },
+      ],
+    };
+    const page2 = {
+      meta: { count: 200 },
+      links: { next: null as string | null },
+      data: [
+        {
+          namespace: "p2",
+          name: "b",
+          deprecated: false,
+          download_count: 20,
+          highest_version: { version: "2.0.0" },
+        },
+      ],
+    };
+
+    let call = 0;
+    httpsGetMock.mockImplementation((url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const body = call++ === 0 ? page1 : page2;
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => {
+        cb(res);
+        queueMicrotask(() => {
+          res.emit("data", Buffer.from(JSON.stringify(body), "utf8"));
+          res.emit("end");
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await svc.forceRefresh();
+
+    expect(httpsGetMock).toHaveBeenCalledTimes(2);
+    const names = svc.getCollections().map((c) => `${c.namespace}.${c.name}`).sort();
+    expect(names).toEqual(["p1.a", "p2.b"]);
+  });
+
+  it("retries HTTP 500 then succeeds", async () => {
+    const storage = path.join(tmpDir, "globalStorage-retry");
+    fs.mkdirSync(storage, { recursive: true });
+
+    const okBody = {
+      meta: { count: 1 },
+      links: { next: null as string | null },
+      data: [
+        {
+          namespace: "ok",
+          name: "ns",
+          deprecated: false,
+          download_count: 1,
+          highest_version: { version: "1.0.0" },
+        },
+      ],
+    };
+
+    installMockGalaxySequence([
+      { statusCode: 500, body: "err" },
+      { statusCode: 200, body: JSON.stringify(okBody) },
+    ]);
+
+    vi.useFakeTimers();
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    const p = svc.forceRefresh();
+    await vi.advanceTimersByTimeAsync(2000);
+    await p;
+    vi.useRealTimers();
+
+    expect(httpsGetMock).toHaveBeenCalledTimes(2);
+    expect(svc.getCollections().some((c) => c.name === "ns")).toBe(true);
+  });
+
+  it("getProgress and onDidUpdateProgress fire during fetch", async () => {
+    const storage = path.join(tmpDir, "globalStorage-prog");
+    fs.mkdirSync(storage, { recursive: true });
+
+    const body = {
+      meta: { count: 1 },
+      links: { next: null as string | null },
+      data: [
+        {
+          namespace: "x",
+          name: "y",
+          deprecated: false,
+          download_count: 5,
+          highest_version: { version: "1.0.0" },
+        },
+      ],
+    };
+    installMockGalaxyResponse(body);
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+
+    const progress: Array<{ loaded: number; total: number }> = [];
+    const sub = svc.onDidUpdateProgress((e: { loaded: number; total: number }) => progress.push(e));
+
+    await svc.forceRefresh();
+    sub.dispose?.();
+
+    expect(progress.length).toBeGreaterThan(0);
+    expect(svc.getProgress().loaded).toBeGreaterThan(0);
+  });
+
+  it("ignores invalid on-disk cache shape and fetches from API", async () => {
+    const storage = path.join(tmpDir, "globalStorage-bad");
+    fs.mkdirSync(storage, { recursive: true });
+    fs.writeFileSync(path.join(storage, "galaxy-collections-cache.json"), '{"timestamp":1}', "utf8");
+
+    installMockGalaxyResponse({
+      meta: { count: 1 },
+      links: { next: null },
+      data: [
+        {
+          namespace: "fresh",
+          name: "api",
+          deprecated: false,
+          download_count: 1,
+          highest_version: { version: "1.0.0" },
+        },
+      ],
+    });
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await svc.ensureLoaded();
+
+    expect(httpsGetMock).toHaveBeenCalled();
+    expect(svc.getCollections().some((c) => c.namespace === "fresh")).toBe(true);
+  });
+
+  it("startBackgroundLoad kicks off fetch without awaiting", async () => {
+    const storage = path.join(tmpDir, "globalStorage-bg");
+    fs.mkdirSync(storage, { recursive: true });
+
+    let released!: () => void;
+    const gate = new Promise<void>((r) => {
+      released = r;
+    });
+
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      void gate.then(() => {
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => {
+            res.emit(
+              "data",
+              Buffer.from(
+                JSON.stringify({
+                  meta: { count: 1 },
+                  links: { next: null },
+                  data: [
+                    {
+                      namespace: "bg",
+                      name: "c",
+                      deprecated: false,
+                      download_count: 1,
+                      highest_version: { version: "1.0.0" },
+                    },
+                  ],
+                }),
+                "utf8",
+              ),
+            );
+            res.emit("end");
+          });
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    svc.startBackgroundLoad();
+    await vi.waitUntil(() => svc.isLoading() || svc.isLoaded(), { timeout: 2000 });
+    released();
+    await vi.waitUntil(() => svc.isLoaded(), { timeout: 3000 });
+    expect(svc.getCollections().some((c) => c.name === "c")).toBe(true);
   });
 });

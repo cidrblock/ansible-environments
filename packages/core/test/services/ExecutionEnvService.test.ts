@@ -224,6 +224,107 @@ describe("ExecutionEnvService", () => {
     expect(info.image).toBe("quay.io/ansible/ee-supported:latest");
   });
 
+  it("isInVSCode is false in test environment", () => {
+    expect(ExecutionEnvService.getInstance().isInVSCode()).toBe(false);
+  });
+
+  it("setLogFunction receives load errors", async () => {
+    const log = vi.fn();
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: "not-json-array",
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    svc.setLogFunction(log);
+    await expect(svc.loadExecutionEnvironments()).rejects.toThrow();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Error loading execution environments"));
+  });
+
+  it("loadExecutionEnvironments returns cached list when already loaded with data", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(EE_LIST),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    const first = await svc.loadExecutionEnvironments();
+    mocks.mockRunTool.mockClear();
+    const second = await svc.loadExecutionEnvironments();
+    expect(second).toEqual(first);
+    expect(mocks.mockRunTool).not.toHaveBeenCalled();
+  });
+
+  it("getExecutionEnvironment finds by full_name", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(EE_LIST),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    await svc.loadExecutionEnvironments();
+    const ee = svc.getExecutionEnvironment("quay.io/ansible/ee-supported:latest");
+    expect(ee?.image_id).toBe("abc123");
+  });
+
+  it("loadDetails returns null when stdout is empty", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    await expect(svc.loadDetails("some:img")).resolves.toBeNull();
+  });
+
+  it("getCollections returns empty when details lack ansible_collections", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ image_name: "x" }),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    const cols = await svc.getCollections("some:img");
+    expect(cols).toEqual([]);
+  });
+
+  it("getPythonPackages returns empty when details lack python_packages", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ image_name: "x" }),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    const pkgs = await svc.getPythonPackages("some:img");
+    expect(pkgs).toEqual([]);
+  });
+
+  it("getInfo returns empty object when details are missing", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({}),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    await expect(svc.getInfo("nope:tag")).resolves.toEqual({});
+  });
+
+  it("getInfo uses os name when pretty-name is absent", async () => {
+    const details = {
+      ansible_version: { details: "ansible 1" },
+      os_release: { details: [{ name: "Linux", version: "1" }] },
+      image_name: "img",
+    };
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(details),
+      stderr: "",
+    });
+    const svc = ExecutionEnvService.getInstance();
+    const info = await svc.getInfo("img");
+    expect(info.os).toBe("Linux");
+  });
+
   it("refresh clears environments and details cache", async () => {
     mocks.mockRunTool.mockResolvedValue({
       exitCode: 0,

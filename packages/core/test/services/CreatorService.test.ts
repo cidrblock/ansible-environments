@@ -263,6 +263,112 @@ describe("CreatorService", () => {
     expect(svc.getSchema()).toEqual(MOCK_SCHEMA);
   });
 
+  it("isInVSCode is false in test environment", () => {
+    expect(CreatorService.getInstance().isInVSCode()).toBe(false);
+  });
+
+  it("setLogFunction is used for schema load failures", async () => {
+    const log = vi.fn();
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 1,
+      stdout: "",
+      stderr: "boom",
+    });
+    const svc = CreatorService.getInstance();
+    svc.setLogFunction(log);
+    await svc.loadSchema();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("ansible-creator schema failed"));
+  });
+
+  it("loadSchema returns null and does not mark loaded when stdout is empty", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+    });
+    const svc = CreatorService.getInstance();
+    const schema = await svc.loadSchema();
+    expect(schema).toBeNull();
+    expect(svc.isLoaded()).toBe(false);
+  });
+
+  it("loadSchema propagates JSON parse errors", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: "{not-json",
+      stderr: "",
+    });
+    const svc = CreatorService.getInstance();
+    await expect(svc.loadSchema()).rejects.toThrow();
+    expect(svc.isLoading()).toBe(false);
+  });
+
+  it("getCommands returns empty when schema is not loaded", () => {
+    const svc = CreatorService.getInstance();
+    expect(svc.getCommands([])).toEqual([]);
+  });
+
+  it("getCommandDescription returns undefined for empty path", async () => {
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(MOCK_SCHEMA),
+      stderr: "",
+    });
+    const svc = CreatorService.getInstance();
+    await svc.loadSchema();
+    expect(svc.getCommandDescription([])).toBeUndefined();
+  });
+
+  it("getPositionalArgs returns empty when schema missing", () => {
+    expect(CreatorService.getInstance().getPositionalArgs(["init", "playbook"])).toEqual([]);
+  });
+
+  it("runCommand uses runAnsibleCreator and returns stdout on success", async () => {
+    mocks.mockRunAnsibleCreator.mockResolvedValue({
+      exitCode: 0,
+      stdout: "done\n",
+      stderr: "",
+    });
+    const svc = CreatorService.getInstance();
+    const out = await svc.runCommand(["init", "playbook"], { project: "p" }, ["project"]);
+    expect(out.trim()).toBe("done");
+    expect(mocks.mockRunAnsibleCreator).toHaveBeenCalled();
+  });
+
+  it("runCommand throws when ansible-creator exits non-zero", async () => {
+    mocks.mockRunAnsibleCreator.mockResolvedValue({
+      exitCode: 2,
+      stdout: "",
+      stderr: "bad",
+    });
+    const svc = CreatorService.getInstance();
+    await expect(svc.runCommand(["init"], { x: true })).rejects.toThrow(/bad/);
+  });
+
+  it("getCommands includes hasSubcommands when nested subcommands exist", async () => {
+    const schemaWithNested = {
+      name: "root",
+      subcommands: {
+        outer: {
+          name: "outer",
+          subcommands: {
+            inner: { name: "inner", description: "leaf" },
+          },
+        },
+      },
+    };
+    mocks.mockRunTool.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(schemaWithNested),
+      stderr: "",
+    });
+    const svc = CreatorService.getInstance();
+    await svc.loadSchema();
+    const cmds = svc.getCommands(["outer"]);
+    expect(cmds.find((c) => c.name === "inner")?.hasSubcommands).toBe(false);
+    expect(svc.getCommands([]).find((c) => c.name === "outer")?.hasSubcommands).toBe(true);
+  });
+
   it("isLoading and isLoaded state transitions", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {

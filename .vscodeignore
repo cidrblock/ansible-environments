@@ -10,10 +10,12 @@ test/**
 *.tsbuildinfo
 *.vsix
 vitest.config.ts
+wdio.conf.ts
 tsconfig.json
 .gitignore
 .eslintrc*
 eslint.config.*
+coverage/**
 docs/**
 CONTRIBUTING.md
 CHANGELOG.md

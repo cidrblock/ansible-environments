@@ -164,6 +164,23 @@ describe("DevToolsService", () => {
     await expect(svc.install()).rejects.toThrow("install is only available in VS Code");
   });
 
+  it("isInVSCode is false in test environment", () => {
+    expect(DevToolsService.getInstance().isInVSCode()).toBe(false);
+  });
+
+  it("upgrade throws when not in VS Code", async () => {
+    const svc = DevToolsService.getInstance();
+    await expect(svc.upgrade()).rejects.toThrow("upgrade is only available in VS Code");
+  });
+
+  it("refresh clears packages when runTool throws", async () => {
+    mocks.mockRunTool.mockRejectedValue(new Error("spawn failed"));
+    const svc = DevToolsService.getInstance();
+    await svc.refresh();
+    expect(svc.getPackages()).toEqual([]);
+    expect(svc.isLoaded()).toBe(true);
+  });
+
   it("isLoading and isLoaded state transitions", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => {
