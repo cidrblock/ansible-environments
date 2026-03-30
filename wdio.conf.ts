@@ -1,38 +1,53 @@
 /// <reference types="wdio-vscode-service" />
-import path from "path";
-import type { Options } from "@wdio/types";
+import path from "node:path";
 
-export const config: Options.Testrunner = {
+const testRoot = path.resolve(process.cwd(), ".wdio-vscode");
+const extensionsDir = path.join(testRoot, "extensions");
+
+export const config: WebdriverIO.Config = {
   runner: "local",
   autoCompileOpts: {
     tsNodeOpts: {
-      project: "./test/e2e/tsconfig.json",
+      project: "./test/ui/tsconfig.json",
     },
   },
-  specs: ["./test/e2e/**/*.test.ts"],
+  specs: ["./test/ui/**/*.spec.ts"],
   maxInstances: 1,
+
   capabilities: [
     {
       browserName: "vscode",
       browserVersion: "stable",
       "wdio:vscodeOptions": {
-        extensionPath: path.resolve(__dirname),
+        extensionPath: path.resolve(process.cwd()),
         userSettings: {
           "editor.fontSize": 14,
+        },
+        vscodeArgs: {
+          "extensions-dir": extensionsDir,
+          "disable-extensions": false,
         },
       },
     },
   ],
-  logLevel: "info",
+
+  logLevel: "warn",
   bail: 0,
   waitforTimeout: 10000,
   connectionRetryTimeout: 120000,
   connectionRetryCount: 3,
-  services: ["vscode"],
+  services: [
+    [
+      "vscode",
+      {
+        cachePath: testRoot,
+      },
+    ],
+  ],
   framework: "mocha",
   reporters: ["spec"],
   mochaOpts: {
     ui: "bdd",
-    timeout: 60000,
+    timeout: 120000,
   },
 };
