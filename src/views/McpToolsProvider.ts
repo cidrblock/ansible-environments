@@ -243,13 +243,14 @@ export class McpToolsProvider implements vscode.TreeDataProvider<ToolTreeItem> {
                     const action = firstLine.endsWith('.') ? firstLine.slice(0, -1) : firstLine;
                     return `${action}, use the ${name} MCP tool to accomplish this`;
                 }
-                // Generic fallback with description
-                const desc = tool.description.split('\n')[0].trim();
-                if (desc && desc.length > 10) {
-                    const action = desc.endsWith('.') ? desc.slice(0, -1) : desc;
-                    return `${action}, use the ${name} MCP tool to accomplish this`;
+                {
+                    const desc = tool.description.split('\n')[0].trim();
+                    if (desc && desc.length > 10) {
+                        const action = desc.endsWith('.') ? desc.slice(0, -1) : desc;
+                        return `${action}, use the ${name} MCP tool to accomplish this`;
+                    }
+                    return `Run the ${name.replace(/_/g, ' ')} command, use the ${name} MCP tool to accomplish this`;
                 }
-                return `Run the ${name.replace(/_/g, ' ')} command, use the ${name} MCP tool to accomplish this`;
         }
     }
 

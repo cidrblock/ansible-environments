@@ -223,11 +223,11 @@ Deliver Lightspeed-equivalent capabilities — natural language to Ansible conte
 - Newly released or custom collections are immediately usable — no model retraining required.
 - Content is validated against real schemas before being returned to the user.
 
-### 7. Content Designer Agent
+### 7. Content Designer Agent (Deferred)
+
+*Note: The Content Designer is deferred to a future release. The implementation is preserved on the `feature/content-designer` branch. This section describes the intended design for reference.*
 
 An example of a specialized agent delivered as an independent module, integrated into the IDE as a guided, multi-phase workflow for specification-driven Ansible content development.
-
-*Note: The Content Designer is expected to be packaged as its own NPM module. The IDE includes it and provides the UI surface (panels, tree view, progress visualization). This pattern — independent agents with IDE integration — establishes the framework for future specialized agents.*
 
 | Phase | What Happens | AI Role | Without AI |
 |---|---|---|---|
@@ -252,7 +252,7 @@ The extension exposes its full Ansible development context to AI agents via the 
 | **Generation** | `generate_ansible_task`, `build_ansible_task`, `generate_ansible_playbook` | Produce validated Ansible YAML from real schemas |
 | **Environment** | `list_execution_environments`, `get_ee_details`, `list_ansible_dev_tools` | Understand the user's environment |
 | **Management** | `install_ansible_collection`, `get_ansible_creator_schema` | Modify the environment |
-| **Design** | `query_design_db`, `get_project_requirements`, `get_design_decisions` | Access Content Designer context |
+| **Design** | `query_design_db`, `get_project_requirements`, `get_design_decisions` | Access Content Designer context (deferred) |
 
 ---
 
@@ -285,8 +285,8 @@ The extension exposes its full Ansible development context to AI agents via the 
 | Document | Location |
 |---|---|
 | POC Repository | [ansible-environments] |
-| Content Designer Proposal | `docs/ansible-content-designer-proposal.md` |
-| Content Designer Task Breakdown | `docs/ansible-content-designer-tasks.md` |
+| Content Designer Proposal | `feature/content-designer` branch: `docs/ansible-content-designer-proposal.md` |
+| Content Designer Task Breakdown | `feature/content-designer` branch: `docs/ansible-content-designer-tasks.md` |
 | Ansible Best Practices Reference | `resources/best_practises.md` |
 | MCP Configuration Example | `mcp-config.example.json` |
 | PRD | [TBD] |
@@ -380,7 +380,7 @@ The extension exposes its full Ansible development context to AI agents via the 
 - [ ] AI summaries are available for collections, plugins, execution environments, and playbooks with a single click
 - [ ] When AI is not available, summary actions degrade gracefully (prompt copied to clipboard with instructions)
 
-### AC-7: Content Designer Agent (requires AI for phases 2-4)
+### AC-7: Content Designer Agent (deferred — requires AI for phases 2-4)
 
 - [ ] User can create a new design project with name and description
 - [ ] Requirements phase: user can add, edit, delete, and tag structured requirements (user stories) without AI

@@ -5,7 +5,7 @@
  */
 
 import { CreatorService } from '@ansible/core';
-import type { SchemaNode, ParameterSchema } from '@ansible/core';
+import type { SchemaNode } from '@ansible/core';
 import { McpToolDefinition, McpToolResult } from './tools';
 
 export class CreatorToolGenerator {

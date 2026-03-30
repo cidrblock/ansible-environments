@@ -84,7 +84,7 @@ export class PlaybookConfigPanel {
                         // Reload with global defaults
                         this._panel.webview.html = this._getHtml();
                         break;
-                    case 'updateSettings':
+                    case 'updateSettings': {
                         const vsConfig = vscode.workspace.getConfiguration('ansibleEnvironments');
                         if (message.zoom !== undefined) {
                             await vsConfig.update('pluginDocZoom', message.zoom, vscode.ConfigurationTarget.Workspace);
@@ -93,6 +93,7 @@ export class PlaybookConfigPanel {
                             await vsConfig.update('pluginDocTheme', message.theme, vscode.ConfigurationTarget.Workspace);
                         }
                         break;
+                    }
                 }
             },
             null,

@@ -59,6 +59,7 @@ export class GitHubCollectionCache {
      * Get the cache directory path (global, in ~/.cache/ansible-environments/)
      */
     private _getCacheDir(): string {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires -- dynamic require for standalone/extension dual-mode
         const os = require('os');
         return path.join(os.homedir(), '.cache', 'ansible-environments');
     }
@@ -281,6 +282,7 @@ export class GitHubCollectionCache {
         let page = 1;
         const perPage = 100;
 
+        // eslint-disable-next-line no-constant-condition -- paginated fetch loop, exits via break
         while (true) {
             const url = `https://api.github.com/orgs/${org}/repos?per_page=${perPage}&page=${page}`;
             

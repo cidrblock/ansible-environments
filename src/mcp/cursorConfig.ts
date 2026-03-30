@@ -240,7 +240,7 @@ export async function showCursorMcpStatus(context: vscode.ExtensionContext): Pro
             return `<h3>${line.replace('### ', '')}</h3>`;
         } else {
             // Convert markdown-style formatting
-            let html = line
+            const html = line
                 .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
                 .replace(/`([^`]+)`/g, '<code>$1</code>');
             return `<div class="status-line">${html}</div>`;

@@ -17,7 +17,7 @@ import {
     GalaxyCollectionCache,
     GitHubCollectionCache,
 } from '@ansible/core';
-import type { PluginOption } from '@ansible/core';
+import type { PluginOption, SchemaNode } from '@ansible/core';
 
 // Helper to convert string | string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -877,7 +877,7 @@ export class McpToolHandler {
         }
 
         // Format the schema into a readable summary
-        const formatNode = (node: any, indent: string = ''): string => {
+        const formatNode = (node: SchemaNode, indent: string = ''): string => {
             const lines: string[] = [];
             
             if (node.name) {
@@ -893,15 +893,14 @@ export class McpToolHandler {
                 if (props.length > 0) {
                     lines.push(`${indent}  Parameters:`);
                     for (const [name, prop] of props) {
-                        const p = prop as any;
                         const req = required.includes(name) ? ' (required)' : '';
-                        lines.push(`${indent}    - ${name}${req}: ${p.description || p.type || ''}`);
+                        lines.push(`${indent}    - ${name}${req}: ${prop.description || prop.type || ''}`);
                     }
                 }
             }
             
             if (node.subcommands) {
-                for (const [subName, subNode] of Object.entries(node.subcommands)) {
+                for (const [, subNode] of Object.entries(node.subcommands)) {
                     lines.push('');
                     lines.push(formatNode(subNode, indent + '  '));
                 }
@@ -996,7 +995,7 @@ export class McpToolHandler {
         let extracted = '';
         for (const heading of headings) {
             const startIndex = content.indexOf(heading);
-            if (startIndex === -1) continue;
+            if (startIndex === -1) { continue; }
             
             // Find the next heading at the same or higher level
             const headingLevel = heading.match(/^#+/)?.[0].length || 2;

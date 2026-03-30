@@ -292,7 +292,7 @@ export class CreatorService {
 
         // Add remaining args as flags
         for (const [key, value] of Object.entries(args)) {
-            if (usedKeys.has(key)) continue; // Skip positional args already added
+            if (usedKeys.has(key)) { continue; }
             
             if (value === true) {
                 cmdArgs.push(`--${key}`);
@@ -340,7 +340,7 @@ export class CreatorService {
 
         // Add remaining args as flags
         for (const [key, value] of Object.entries(args)) {
-            if (usedKeys.has(key)) continue;
+            if (usedKeys.has(key)) { continue; }
             
             if (value === true) {
                 commandParts.push(`--${key}`);
@@ -365,7 +365,7 @@ export class CreatorService {
         let node: SchemaNode | undefined = this._schema;
         for (const segment of path) {
             node = node?.subcommands?.[segment];
-            if (!node) return [];
+            if (!node) { return []; }
         }
 
         // Find parameters without aliases (these are positional)

@@ -6,7 +6,6 @@
  */
 
 import { CollectionsService } from '@ansible/core';
-import type { PluginInfo } from '@ansible/core';
 
 export interface PluginSearchResult {
     fullName: string;
@@ -147,7 +146,7 @@ export class PluginSearchIndex {
     private _tokenize(text: string): string[] {
         return text
             .toLowerCase()
-            .split(/[\s_\-\.]+/)
+            .split(/[\s_\-.]+/)
             .filter(t => t.length > 1);
     }
 

@@ -49,6 +49,7 @@ export class GalaxyCollectionCache {
     private _loading: boolean = false;
     private _loaded: boolean = false;
     private _loadPromise: Promise<void> | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- VS Code StatusBarItem (conditional import)
     private _statusBarItem: any | undefined;
     private _onDidLoad = vscode ? new vscode.EventEmitter<void>() : new SimpleEventEmitter<void>();
     public readonly onDidLoad = this._onDidLoad.event;
@@ -58,6 +59,7 @@ export class GalaxyCollectionCache {
         ? new vscode.EventEmitter<{ loaded: number; total: number }>() 
         : new SimpleEventEmitter<{ loaded: number; total: number }>();
     public readonly onDidUpdateProgress = this._onDidUpdateProgress.event;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- VS Code ExtensionContext (conditional import)
     private _extensionContext: any | undefined;
     private _cacheTimestamp: number = 0;
     private _standaloneMode: boolean = !vscode;
@@ -68,6 +70,7 @@ export class GalaxyCollectionCache {
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- VS Code ExtensionContext (conditional import)
     public setExtensionContext(context: any): void {
         this._extensionContext = context;
     }

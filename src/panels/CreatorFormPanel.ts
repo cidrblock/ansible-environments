@@ -1,7 +1,5 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { log } from '../extension';
-import type { PythonEnvironmentApi } from '@ansible/core';
 import { TerminalService } from '../services/TerminalService';
 
 interface SchemaNode {
@@ -85,8 +83,7 @@ export class CreatorFormPanel {
                     case 'cancel':
                         this._panel.dispose();
                         break;
-                    case 'updateSettings':
-                        // Save settings to workspace configuration
+                    case 'updateSettings': {
                         const config = vscode.workspace.getConfiguration('ansibleEnvironments');
                         if (message.zoom !== undefined) {
                             await config.update('pluginDocZoom', message.zoom, vscode.ConfigurationTarget.Workspace);
@@ -95,6 +92,7 @@ export class CreatorFormPanel {
                             await config.update('pluginDocTheme', message.theme, vscode.ConfigurationTarget.Workspace);
                         }
                         break;
+                    }
                 }
             },
             null,

@@ -10,6 +10,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- VS Code MCP API is not yet stable/typed */
+
 /**
  * Register the MCP server with VS Code.
  * 
@@ -19,7 +21,6 @@ import * as path from 'path';
  * @param context Extension context for subscriptions and paths
  */
 export function registerMcpServerProvider(context: vscode.ExtensionContext): void {
-    // Check if the MCP API exists (requires VS Code 1.101+)
     if (!vscode.lm || typeof (vscode.lm as any).registerMcpServerDefinitionProvider !== 'function') {
         console.log('Ansible Environments: VS Code MCP API not available');
         return;
@@ -32,16 +33,12 @@ export function registerMcpServerProvider(context: vscode.ExtensionContext): voi
 
     const didChangeEmitter = new vscode.EventEmitter<void>();
 
-    // Compiled MCP server entry (packages/mcp-server project output)
     const serverPath = context.asAbsolutePath(path.join('packages', 'mcp-server', 'out', 'server.js'));
 
-    // Register the provider following the official sample pattern
-    // https://github.com/microsoft/vscode-extension-samples/blob/main/mcp-extension-sample/src/extension.ts
     context.subscriptions.push(
         (vscode.lm as any).registerMcpServerDefinitionProvider('ansibleEnvironments', {
             onDidChangeMcpServerDefinitions: didChangeEmitter.event,
             provideMcpServerDefinitions: async (): Promise<any[]> => {
-                // Get the workspace folder - MCP server needs this to find the environment cache
                 const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
                 
                 if (!workspaceFolder) {
@@ -49,14 +46,11 @@ export function registerMcpServerProvider(context: vscode.ExtensionContext): voi
                     return [];
                 }
 
-                // McpStdioServerDefinition(label, command, args, env)
-                // Constructor takes positional arguments, NOT an options object
-                // The 4th arg (env) should include cwd via shell execution
                 return [
                     new (vscode as any).McpStdioServerDefinition(
-                        'Ansible Environments',  // label
-                        'node',                   // command
-                        [serverPath],             // args
+                        'Ansible Environments',
+                        'node',
+                        [serverPath],
                         {
                             ANSIBLE_ENV_WORKSPACE: workspaceFolder,
                             ANSIBLE_ENV_EXTENSION_PATH: context.extensionPath,
@@ -71,9 +65,12 @@ export function registerMcpServerProvider(context: vscode.ExtensionContext): voi
     console.log('Ansible Environments: MCP server provider registered');
 }
 
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 /**
  * Check if VS Code MCP is available
  */
 export function isMcpAvailable(): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- VS Code MCP API is not yet stable/typed
     return !!vscode.lm && typeof (vscode.lm as any).registerMcpServerDefinitionProvider === 'function';
 }

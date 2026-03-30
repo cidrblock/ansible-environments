@@ -2,7 +2,7 @@
   "mcpServers": {
     "ansible-environments": {
       "command": "node",
-      "args": ["/home/bthornto/github/python-ext-demo/out/mcp/server.js"],
+      "args": ["/path/to/ansible-environments/packages/mcp-server/out/server.js"],
       "env": {}
     }
   }

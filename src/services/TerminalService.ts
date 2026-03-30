@@ -206,7 +206,7 @@ export class TerminalService {
         terminal.sendText(command);
 
         // Try shell integration for exit code
-        const shellIntegration = (terminal as any).shellIntegration;
+        const shellIntegration = (terminal as { shellIntegration?: { onDidEndCommandExecution?: (cb: (e: { exitCode: number | undefined }) => void) => { dispose(): void } } }).shellIntegration;
         
         if (shellIntegration?.onDidEndCommandExecution) {
             return new Promise(resolve => {
@@ -215,7 +215,7 @@ export class TerminalService {
                     resolve({ output: '', exitCode: undefined, success: false });
                 }, timeout);
 
-                const listener = shellIntegration.onDidEndCommandExecution((e: any) => {
+                const listener = shellIntegration.onDidEndCommandExecution!((e: { exitCode: number | undefined }) => {
                     clearTimeout(timeoutId);
                     listener.dispose();
                     resolve({

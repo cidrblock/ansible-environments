@@ -28,7 +28,7 @@ interface CollectionsCache {
     }>;
 }
 
-import { PythonEnvironmentApi, PythonEnvironment } from '../types/pythonEnvApi';
+import { PythonEnvironmentApi } from '../types/pythonEnvApi';
 
 /**
  * Information about an Ansible collection
@@ -851,7 +851,7 @@ export class CollectionsService {
             }
 
             // Find the start of JSON (ansible-doc might output warnings before the JSON)
-            let jsonStart = result.indexOf('{');
+            const jsonStart = result.indexOf('{');
             if (jsonStart === -1) {
                 console.error('CollectionsService: No JSON found in ansible-doc output');
                 console.error('Output starts with:', result.substring(0, 100));
