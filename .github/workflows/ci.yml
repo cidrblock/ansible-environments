@@ -48,7 +48,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
 
-  e2e:
+  integration:
     runs-on: ubuntu-latest
     needs: build-and-test
     steps:
@@ -62,8 +62,28 @@ jobs:
       - run: npm ci
       - run: npm run compile
 
-      - name: Run e2e tests
-        run: xvfb-run --auto-servernum npm run test:e2e
+      - name: Run integration tests
+        run: xvfb-run --auto-servernum npm run test:integration
+
+  ui:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run compile
+
+      - name: Install test dependency extensions
+        run: npm run pretest:ui
+
+      - name: Run UI tests
+        run: xvfb-run --auto-servernum npm run test:ui
 
   package:
     runs-on: ubuntu-latest

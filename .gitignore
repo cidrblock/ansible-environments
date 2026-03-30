@@ -2,7 +2,7 @@ out
 dist
 node_modules
 .vscode-test/
-.wdio-vscode-service/
+.wdio-vscode/
 *.vsix
 *.tsbuildinfo
 .DS_Store
