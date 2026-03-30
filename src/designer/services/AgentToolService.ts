@@ -11,8 +11,7 @@
  */
 
 import * as vscode from 'vscode';
-import { McpToolHandler } from '../../mcp/handlers';
-import { STATIC_TOOLS, McpToolDefinition } from '../../mcp/tools';
+import { McpToolHandler, STATIC_TOOLS } from '@ansible/mcp-server';
 
 // Singleton instance
 let instance: AgentToolService | undefined;

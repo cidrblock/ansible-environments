@@ -4,7 +4,8 @@
  * Interactive, stateful task building with guided parameter collection.
  */
 
-import { CollectionsService, PluginData, PluginOption } from '../services/CollectionsService';
+import { CollectionsService } from '@ansible/core';
+import type { PluginData, PluginOption } from '@ansible/core';
 
 interface TaskBuilderSession {
     id: string;

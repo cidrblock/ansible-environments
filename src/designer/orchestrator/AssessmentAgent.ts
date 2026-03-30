@@ -20,7 +20,7 @@ import type {
 } from '../types/designer';
 import { DesignerDatabase } from '../database/DesignerDatabase';
 import { GuidanceService } from '../services/GuidanceService';
-import { CollectionsService } from '../../services/CollectionsService';
+import { CollectionsService } from '@ansible/core';
 import { getAgentToolService, AgentToolService } from '../services/AgentToolService';
 
 /**

@@ -6,7 +6,7 @@
  */
 
 import * as vscode from 'vscode';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import type { PythonEnvironmentApi } from '@ansible/core';
 
 export interface CommandResult {
     output: string;

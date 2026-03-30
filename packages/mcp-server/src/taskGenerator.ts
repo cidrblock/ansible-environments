@@ -4,7 +4,8 @@
  * One-shot Ansible task YAML generation for any plugin.
  */
 
-import { CollectionsService, PluginData, PluginOption } from '../services/CollectionsService';
+import { CollectionsService } from '@ansible/core';
+import type { PluginData, PluginOption } from '@ansible/core';
 
 export interface TaskGeneratorInput {
     plugin: string;

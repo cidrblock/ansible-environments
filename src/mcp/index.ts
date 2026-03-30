@@ -1,15 +1,24 @@
 /**
  * MCP Module Exports
  * 
- * This module provides MCP (Model Context Protocol) server functionality
- * for exposing Ansible tools to AI agents.
+ * Re-exports server implementation from @ansible/mcp-server plus VS Code–local MCP wiring.
  */
 
-export { STATIC_TOOLS, McpToolDefinition, McpToolResult } from './tools';
-export { PluginSearchIndex, PluginSearchResult } from './pluginSearch';
-export { TaskGenerator, TaskGeneratorInput, TaskGeneratorResult } from './taskGenerator';
-export { TaskBuilder, TaskBuilderInput, TaskBuilderResult } from './taskBuilder';
-export { CreatorToolGenerator } from './creatorTools';
-export { McpToolHandler } from './handlers';
+export {
+    STATIC_TOOLS,
+    type McpToolDefinition,
+    type McpToolResult,
+    PluginSearchIndex,
+    type PluginSearchResult,
+    TaskGenerator,
+    type TaskGeneratorInput,
+    type TaskGeneratorResult,
+    TaskBuilder,
+    type TaskBuilderInput,
+    type TaskBuilderResult,
+    CreatorToolGenerator,
+    McpToolHandler,
+    type McpDesignerToolHandler,
+} from '@ansible/mcp-server';
 export { registerMcpServerProvider, isMcpAvailable } from './vscodeProvider';
 export { configureCursorMcp, showCursorMcpStatus, getMcpStatus, McpStatus, detectIde, IdeType } from './cursorConfig';

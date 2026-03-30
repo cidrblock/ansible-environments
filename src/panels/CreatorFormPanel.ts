@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { log } from '../extension';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import type { PythonEnvironmentApi } from '@ansible/core';
 import { TerminalService } from '../services/TerminalService';
 
 interface SchemaNode {

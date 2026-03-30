@@ -9,17 +9,7 @@ try {
 }
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-
-// TerminalService is only available in VS Code context - lazy load to avoid
-// breaking the MCP server which runs standalone
-let TerminalService: typeof import('./TerminalService').TerminalService | undefined;
-if (vscode) {
-    try {
-        TerminalService = require('./TerminalService').TerminalService;
-    } catch {
-        // Running standalone
-    }
-}
+import { SimpleEventEmitter } from '../utils/SimpleEventEmitter';
 
 /**
  * Information about an installed dev tools package
@@ -29,28 +19,13 @@ export interface DevToolPackage {
     version: string;
 }
 
-// Simple EventEmitter for standalone mode
-class SimpleEventEmitter<T> {
-    private listeners: Array<(e: T) => void> = [];
-    
-    public event = (listener: (e: T) => void) => {
-        this.listeners.push(listener);
-        return { dispose: () => {
-            const idx = this.listeners.indexOf(listener);
-            if (idx >= 0) this.listeners.splice(idx, 1);
-        }};
-    };
-    
-    public fire(e: T): void {
-        this.listeners.forEach(l => l(e));
-    }
-}
-
 /**
  * Service for managing Ansible Dev Tools packages.
  * This service works both in VS Code and standalone (for MCP server).
  */
 export class DevToolsService {
+    private static terminalServiceFactory: (() => any) | undefined;
+
     private static _instance: DevToolsService | undefined;
     private _pythonEnvApi: PythonEnvironmentApi | undefined;
     private _packages: DevToolPackage[] = [];
@@ -77,6 +52,13 @@ export class DevToolsService {
             DevToolsService._instance = new DevToolsService();
         }
         return DevToolsService._instance;
+    }
+
+    /**
+     * Register how to obtain TerminalService from the extension host (VS Code only).
+     */
+    public static setTerminalServiceFactory(factory: () => any): void {
+        DevToolsService.terminalServiceFactory = factory;
     }
 
     /**
@@ -204,11 +186,12 @@ export class DevToolsService {
 
         await this.initialize();
 
-        if (!vscode || !TerminalService) {
-            throw new Error('This operation requires VS Code');
+        if (!DevToolsService.terminalServiceFactory) {
+            void vscode.window.showInformationMessage('Upgrade is only available in VS Code.');
+            return;
         }
 
-        // Use TerminalService for proper venv handling
+        const TerminalService = DevToolsService.terminalServiceFactory();
         const terminalService = TerminalService.getInstance();
         const managed = await terminalService.createActivatedTerminal({
             name: 'Upgrade ansible-dev-tools',

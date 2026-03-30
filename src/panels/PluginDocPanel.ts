@@ -1,11 +1,6 @@
 import * as vscode from 'vscode';
-import { 
-    CollectionsService, 
-    PluginOption, 
-    PluginDoc, 
-    PluginReturn, 
-    PluginData 
-} from '../services/CollectionsService';
+import { CollectionsService } from '@ansible/core';
+import type { PluginOption, PluginDoc, PluginReturn, PluginData } from '@ansible/core';
 
 // Helper to normalize string or string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {

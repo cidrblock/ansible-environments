@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { CollectionsService, CollectionInfo, PluginInfo, CollectionData } from '../services/CollectionsService';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import { CollectionsService, CollectionInfo, PluginInfo, CollectionData } from '@ansible/core';
+import type { PythonEnvironmentApi } from '@ansible/core';
 import { log } from '../extension';
 
 type TreeNode = CollectionNode | PluginTypeNode | PluginNode | LoadingNode;

@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import { GalaxyCollectionCache } from '../services/GalaxyCollectionCache';
-import { GitHubCollectionCache } from '../services/GitHubCollectionCache';
+import { GalaxyCollectionCache, GitHubCollectionCache } from '@ansible/core';
 
 // Logging function
 let extensionLog: (msg: string) => void = console.log;
@@ -461,7 +460,7 @@ export class CollectionSourcesProvider implements vscode.TreeDataProvider<Collec
             title: `Installing ${installUrl}...`,
             cancellable: false
         }, async () => {
-            const { getCommandService } = await import('../services/CommandService');
+            const { getCommandService } = await import('@ansible/core');
             const commandService = getCommandService();
 
             const result = await commandService.runTool('ade', ['install', installUrl]);

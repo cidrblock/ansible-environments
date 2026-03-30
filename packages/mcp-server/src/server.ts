@@ -6,7 +6,7 @@
  * Can be used with Cursor, VS Code Copilot, or any MCP-compatible client.
  * 
  * Usage:
- *   node out/mcp/server.js
+ *   node packages/mcp-server/out/server.js
  *   
  * Or via npx (when published):
  *   npx @ansible/environments-mcp
@@ -16,7 +16,7 @@
  *   "mcpServers": {
  *     "ansible-environments": {
  *       "command": "node",
- *       "args": ["/path/to/extension/out/mcp/server.js"]
+ *       "args": ["/path/to/repo/packages/mcp-server/out/server.js"]
  *     }
  *   }
  * }

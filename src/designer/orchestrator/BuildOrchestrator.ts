@@ -27,9 +27,8 @@ import { LlmService } from '../services/LlmService';
 import { PlanningAgent, AgentBuildStep } from './PlanningAgent';
 
 // Import services
-import { CollectionsService } from '../../services/CollectionsService';
-import { CreatorService } from '../../services/CreatorService';
-import { CreatorToolGenerator } from '../../mcp/creatorTools';
+import { CollectionsService, CreatorService } from '@ansible/core';
+import { CreatorToolGenerator } from '@ansible/mcp-server';
 
 const execAsync = promisify(exec);
 

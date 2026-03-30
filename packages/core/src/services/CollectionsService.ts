@@ -1,21 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { log } from '../utils/logging';
+import { SimpleEventEmitter } from '../utils/SimpleEventEmitter';
+
 // Conditional vscode import - only used when available
 let vscode: typeof import('vscode') | undefined;
-let extensionLog: ((message: string) => void) | undefined;
 try {
     vscode = require('vscode');
 } catch {
     // Running standalone (not in VS Code)
-}
-
-/**
- * Set the log function for the service (called from extension.ts)
- */
-export function setLogFunction(logFn: (message: string) => void): void {
-    extensionLog = logFn;
-    logFn('CollectionsService: Log function initialized');
 }
 
 // Cache configuration
@@ -154,23 +148,6 @@ interface AdeInspectOutput {
     [collectionName: string]: AdeCollectionInfo;
 }
 
-// Simple EventEmitter for standalone mode
-class SimpleEventEmitter<T> {
-    private listeners: Array<(e: T) => void> = [];
-    
-    public event = (listener: (e: T) => void) => {
-        this.listeners.push(listener);
-        return { dispose: () => {
-            const idx = this.listeners.indexOf(listener);
-            if (idx >= 0) this.listeners.splice(idx, 1);
-        }};
-    };
-    
-    public fire(e: T): void {
-        this.listeners.forEach(l => l(e));
-    }
-}
-
 // Command execution is now handled by CommandService
 
 /**
@@ -249,15 +226,10 @@ function readCollectionsCache(): CollectionsCache | null {
 }
 
 /**
- * Log a message using the extension log if available
+ * Log a message via shared logging (extension or console fallback)
  */
 function logMessage(message: string): void {
-    const fullMessage = `CollectionsService: ${message}`;
-    if (extensionLog) {
-        extensionLog(fullMessage);
-    } else {
-        console.log(fullMessage);
-    }
+    log(`CollectionsService: ${message}`);
 }
 
 /**
@@ -962,3 +934,5 @@ export class CollectionsService {
         }
     }
 }
+
+export { setLogFunction } from '../utils/logging';

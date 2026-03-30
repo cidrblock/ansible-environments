@@ -16,9 +16,8 @@
     "declarationMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", ".vscode-test", "packages"],
+  "exclude": ["node_modules", "out", "test"],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/mcp-server" }
+    { "path": "../core" }
   ]
 }

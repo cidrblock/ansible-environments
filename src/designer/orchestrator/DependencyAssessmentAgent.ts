@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import type { EnrichedRequirement, AssessmentQuestion, QuestionType, QuestionPriority, IdentifiedCollection } from '../types/designer';
 import { DesignerDatabase } from '../database/DesignerDatabase';
-import { CollectionsService } from '../../services/CollectionsService';
+import { CollectionsService } from '@ansible/core';
 import { getAgentToolService, AgentToolService } from '../services/AgentToolService';
 
 /**

@@ -32,8 +32,8 @@ export function registerMcpServerProvider(context: vscode.ExtensionContext): voi
 
     const didChangeEmitter = new vscode.EventEmitter<void>();
 
-    // Get the path to the compiled MCP server
-    const serverPath = context.asAbsolutePath(path.join('out', 'mcp', 'server.js'));
+    // Compiled MCP server entry (packages/mcp-server project output)
+    const serverPath = context.asAbsolutePath(path.join('packages', 'mcp-server', 'out', 'server.js'));
 
     // Register the provider following the official sample pattern
     // https://github.com/microsoft/vscode-extension-samples/blob/main/mcp-extension-sample/src/extension.ts
@@ -57,7 +57,10 @@ export function registerMcpServerProvider(context: vscode.ExtensionContext): voi
                         'Ansible Environments',  // label
                         'node',                   // command
                         [serverPath],             // args
-                        { ANSIBLE_ENV_WORKSPACE: workspaceFolder }  // env - pass workspace path
+                        {
+                            ANSIBLE_ENV_WORKSPACE: workspaceFolder,
+                            ANSIBLE_ENV_EXTENSION_PATH: context.extensionPath,
+                        }
                     )
                 ];
             }

@@ -12,16 +12,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-// Import log function conditionally
-let log: (message: string) => void = console.error;
-try {
-    const ext = require('../extension');
-    if (ext.log) {
-        log = ext.log;
-    }
-} catch {
-    // Running standalone
-}
+import { log } from '../utils/logging';
+import { SimpleEventEmitter } from '../utils/SimpleEventEmitter';
 
 export interface GalaxyCollection {
     namespace: string;
@@ -50,22 +42,6 @@ interface GalaxyApiResponse {
 
 const CACHE_FILE_NAME = 'galaxy-collections-cache.json';
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-
-// Simple event emitter for standalone mode
-class SimpleEventEmitter<T> {
-    private _listeners: Array<(e: T) => void> = [];
-    
-    get event() {
-        return (listener: (e: T) => void) => {
-            this._listeners.push(listener);
-            return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
-        };
-    }
-    
-    fire(data: T) {
-        this._listeners.forEach(l => l(data));
-    }
-}
 
 export class GalaxyCollectionCache {
     private static _instance: GalaxyCollectionCache | undefined;

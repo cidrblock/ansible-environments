@@ -9,13 +9,20 @@ import { PluginSearchIndex } from './pluginSearch';
 import { TaskGenerator } from './taskGenerator';
 import { TaskBuilder } from './taskBuilder';
 import { CreatorToolGenerator } from './creatorTools';
-import { CollectionsService, PluginOption } from '../services/CollectionsService';
-import { DevToolsService } from '../services/DevToolsService';
-import { ExecutionEnvService } from '../services/ExecutionEnvService';
-import { CreatorService } from '../services/CreatorService';
-import { GalaxyCollectionCache } from '../services/GalaxyCollectionCache';
-import { GitHubCollectionCache } from '../services/GitHubCollectionCache';
-import { DesignerDatabase } from '../designer/database/DesignerDatabase';
+import {
+    CollectionsService,
+    DevToolsService,
+    ExecutionEnvService,
+    CreatorService,
+    GalaxyCollectionCache,
+    GitHubCollectionCache,
+} from '@ansible/core';
+import type { PluginOption } from '@ansible/core';
+
+/** Optional Content Designer tool implementation (registered by the VS Code extension). */
+export interface McpDesignerToolHandler {
+    handleTool(name: string, args: Record<string, unknown>): Promise<McpToolResult>;
+}
 
 // Helper to convert string | string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -25,10 +32,35 @@ function toArray(value: string | string[] | undefined): string[] {
 }
 
 export class McpToolHandler {
+    private static _designerHandler: McpDesignerToolHandler | undefined;
+
+    /**
+     * Register Content Designer–specific MCP tool handlers (query DB, requirements, decisions).
+     * When unset, those tools return "Content Designer not available".
+     */
+    static setDesignerHandler(handler: McpDesignerToolHandler | undefined): void {
+        McpToolHandler._designerHandler = handler;
+    }
+
     private _searchIndex = PluginSearchIndex.getInstance();
     private _taskGenerator = new TaskGenerator();
     private _taskBuilder = new TaskBuilder();
     private _creatorTools = new CreatorToolGenerator();
+
+    private _designerUnavailable(): McpToolResult {
+        return {
+            content: [{ type: 'text', text: 'Content Designer not available' }],
+            isError: true,
+        };
+    }
+
+    private async _delegateDesignerTool(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
+        const h = McpToolHandler._designerHandler;
+        if (!h) {
+            return this._designerUnavailable();
+        }
+        return h.handleTool(name, args);
+    }
 
     async initialize(): Promise<void> {
         await this._searchIndex.ensureBuilt();
@@ -86,15 +118,13 @@ export class McpToolHandler {
                 case 'get_ansible_creator_schema':
                     return this._handleGetCreatorSchema();
 
-                // Content Designer
+                // Content Designer (DB-backed tools require extension-registered handler)
                 case 'query_design_db':
-                    return this._handleQueryDesignDb(args);
+                case 'get_project_requirements':
+                case 'get_design_decisions':
+                    return this._delegateDesignerTool(name, args);
                 case 'get_ansible_best_practices':
                     return this._handleGetBestPractices(args);
-                case 'get_project_requirements':
-                    return this._handleGetRequirements(args);
-                case 'get_design_decisions':
-                    return this._handleGetDesignDecisions(args);
 
                 default:
                     return {
@@ -925,113 +955,6 @@ export class McpToolHandler {
         };
     }
 
-    // === Content Designer Handlers ===
-
-    private async _handleQueryDesignDb(args: Record<string, unknown>): Promise<McpToolResult> {
-        const query = args.query as string;
-        const limit = args.limit as number || 100;
-
-        if (!query) {
-            return {
-                content: [{ type: 'text', text: 'Error: query parameter is required' }],
-                isError: true
-            };
-        }
-
-        // Get workspace root from environment (set by MCP server)
-        const workspaceRoot = process.env.ANSIBLE_ENV_WORKSPACE;
-        if (!workspaceRoot) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: 'Error: No workspace context available. The Content Designer database requires a workspace.'
-                }],
-                isError: true
-            };
-        }
-
-        // Check if design.db exists
-        const db = new DesignerDatabase(workspaceRoot);
-        if (!db.exists()) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `No Content Designer project found in this workspace.
-
-To create a new Content Designer project:
-1. Open the Content Designer view in VS Code
-2. Click "New Project" to initialize a design.db
-
-Or use the ansible-creator tool to scaffold a new project.`
-                }],
-                isError: true
-            };
-        }
-
-        try {
-            // Initialize and execute query
-            await db.initialize();
-            const result = db.executeReadonlyQuery(query, limit);
-            db.close();
-
-            if (!result.success) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `Query Error: ${result.error}\n\n${result.hint || ''}`
-                    }],
-                    isError: true
-                };
-            }
-
-            // Format results
-            if (!result.rows || result.rows.length === 0) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: 'Query returned no results.'
-                    }]
-                };
-            }
-
-            // Format as markdown table
-            const columns = result.columns || [];
-            const rows = result.rows || [];
-
-            // Build table
-            let table = '| ' + columns.join(' | ') + ' |\n';
-            table += '| ' + columns.map(() => '---').join(' | ') + ' |\n';
-
-            for (const row of rows) {
-                const values = columns.map(col => {
-                    const val = row[col];
-                    if (val === null || val === undefined) return '';
-                    if (typeof val === 'object') return JSON.stringify(val);
-                    return String(val).replace(/\|/g, '\\|').replace(/\n/g, ' ');
-                });
-                table += '| ' + values.join(' | ') + ' |\n';
-            }
-
-            let response = `Query returned ${result.rowCount} row(s)${result.truncated ? ' (truncated)' : ''}:\n\n${table}`;
-
-            if (result.truncated) {
-                response += `\n\n*Results truncated. Use the \`limit\` parameter to fetch more rows (max 1000).*`;
-            }
-
-            return {
-                content: [{ type: 'text', text: response }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `Error executing query: ${error instanceof Error ? error.message : error}`
-                }],
-                isError: true
-            };
-        }
-    }
-
     /**
      * Handle get_ansible_best_practices tool
      */
@@ -1054,12 +977,10 @@ Or use the ansible-creator tool to scaffold a new project.`
         ].filter(p => p);
         
         let content = '';
-        let foundPath = '';
         
         for (const p of possiblePaths) {
             if (fs.existsSync(p)) {
                 content = fs.readFileSync(p, 'utf-8');
-                foundPath = p;
                 break;
             }
         }
@@ -1142,303 +1063,5 @@ Or use the ansible-creator tool to scaffold a new project.`
                 text: extracted
             }]
         };
-    }
-
-    private async _handleGetRequirements(args: Record<string, unknown>): Promise<McpToolResult> {
-        const includeSystem = args.include_system === true;
-        const statusFilter = args.status_filter as string | undefined;
-
-        // Get workspace root from environment (set by MCP server)
-        const workspaceRoot = process.env.ANSIBLE_ENV_WORKSPACE;
-        if (!workspaceRoot) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: 'Error: No workspace context available.'
-                }],
-                isError: true
-            };
-        }
-
-        const db = new DesignerDatabase(workspaceRoot);
-        if (!db.exists()) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: 'No Content Designer project found. Create a new project first.'
-                }],
-                isError: true
-            };
-        }
-
-        await db.initialize();
-
-        // Build query
-        let sql = `
-            SELECT 
-                r.id,
-                r.description,
-                r.status,
-                r.created_at,
-                GROUP_CONCAT(rt.tag, ', ') as tags
-            FROM requirements r
-            LEFT JOIN requirement_tags rt ON r.id = rt.requirement_id
-            WHERE 1=1
-        `;
-        const params: unknown[] = [];
-
-        if (!includeSystem) {
-            sql += ` AND r.id GLOB 'REQ-*'`;
-        }
-
-        if (statusFilter) {
-            sql += ` AND r.status = ?`;
-            params.push(statusFilter);
-        }
-
-        sql += ` GROUP BY r.id ORDER BY r.id`;
-
-        try {
-            // Pass params only if there are any (sql.js can fail with empty array)
-            const requirements = params.length > 0 
-                ? db.all<{
-                    id: string;
-                    description: string;
-                    status: string;
-                    created_at: string;
-                    tags: string | null;
-                }>(sql, ...params)
-                : db.all<{
-                    id: string;
-                    description: string;
-                    status: string;
-                    created_at: string;
-                    tags: string | null;
-                }>(sql);
-
-            if (requirements.length === 0) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: 'No requirements found. Add requirements in the Content Designer before assessment.'
-                    }]
-                };
-            }
-
-            // Separate SYS (guidance) from REQ (user requirements)
-            const sysItems = requirements
-                .filter((r: { id: string }) => r.id.startsWith('SYS-'))
-                .map((r: { id: string; description: string; status: string; tags: string | null }) => ({
-                    id: r.id,
-                    instruction: r.description,
-                    tags: r.tags ? r.tags.split(', ') : []
-                }));
-
-            const reqItems = requirements
-                .filter((r: { id: string }) => r.id.startsWith('REQ-'))
-                .map((r: { id: string; description: string; status: string; tags: string | null; created_at: string }) => ({
-                    id: r.id,
-                    description: r.description,
-                    status: r.status,
-                    tags: r.tags ? r.tags.split(', ') : [],
-                    created_at: r.created_at
-                }));
-
-            // Build response with clear sections
-            const response: Record<string, unknown> = {
-                user_requirements: {
-                    count: reqItems.length,
-                    note: 'These are what the user wants to build. Generate questions/content for these.',
-                    items: reqItems
-                }
-            };
-
-            if (sysItems.length > 0) {
-                response.system_guidance = {
-                    count: sysItems.length,
-                    note: 'These are YOUR operational instructions. Follow them in order (SYS-001, SYS-002, etc). Do NOT generate questions for these.',
-                    items: sysItems
-                };
-            }
-
-            db.close();
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(response, null, 2)
-                }]
-            };
-        } catch (error) {
-            db.close();
-            return {
-                content: [{
-                    type: 'text',
-                    text: `Failed to query requirements: ${error instanceof Error ? error.message : String(error)}`
-                }],
-                isError: true
-            };
-        }
-    }
-
-    private async _handleGetDesignDecisions(args: Record<string, unknown>): Promise<McpToolResult> {
-        const requirementId = args.requirement_id as string | undefined;
-        const stage = args.stage as string | undefined;
-        const answeredOnly = args.answered_only === true;
-
-        // Get workspace root from environment
-        const workspaceRoot = process.env.ANSIBLE_ENV_WORKSPACE;
-        if (!workspaceRoot) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: 'Error: No workspace context available.'
-                }],
-                isError: true
-            };
-        }
-
-        const db = new DesignerDatabase(workspaceRoot);
-        if (!db.exists()) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: 'No Content Designer project found.'
-                }],
-                isError: true
-            };
-        }
-
-        await db.initialize();
-
-        let sql = `
-            SELECT 
-                dd.id,
-                dd.requirement_id,
-                dd.question_id,
-                dd.category,
-                dd.question,
-                dd.question_type,
-                dd.choices,
-                dd.suggested_default,
-                dd.answer,
-                dd.rationale,
-                dd.stage,
-                r.description as requirement_description
-            FROM design_decisions dd
-            JOIN requirements r ON dd.requirement_id = r.id
-            WHERE 1=1
-        `;
-        const params: unknown[] = [];
-
-        if (requirementId) {
-            sql += ` AND dd.requirement_id = ?`;
-            params.push(requirementId);
-        }
-
-        if (stage) {
-            sql += ` AND dd.stage = ?`;
-            params.push(stage);
-        }
-
-        if (answeredOnly) {
-            sql += ` AND dd.answer IS NOT NULL`;
-        }
-
-        sql += ` ORDER BY dd.requirement_id, dd.category, dd.question_id`;
-
-        try {
-            // Pass params only if there are any (sql.js can fail with empty array)
-            const decisions = params.length > 0
-                ? db.all<{
-                    id: number;
-                    requirement_id: string;
-                    question_id: string;
-                    category: string;
-                    question: string;
-                    question_type: string;
-                    choices: string | null;
-                    suggested_default: string | null;
-                    answer: string | null;
-                    rationale: string | null;
-                    stage: string;
-                    requirement_description: string;
-                }>(sql, ...params)
-                : db.all<{
-                    id: number;
-                    requirement_id: string;
-                    question_id: string;
-                    category: string;
-                    question: string;
-                    question_type: string;
-                    choices: string | null;
-                    suggested_default: string | null;
-                    answer: string | null;
-                    rationale: string | null;
-                    stage: string;
-                    requirement_description: string;
-                }>(sql);
-
-            // Group by requirement
-            const grouped = new Map<string, {
-                requirement_id: string;
-                requirement_description: string;
-                decisions: Array<{
-                    question_id: string;
-                    category: string;
-                    question: string;
-                    question_type: string;
-                    choices: string[] | null;
-                    suggested_default: string | null;
-                    answer: string | null;
-                    rationale: string | null;
-                    stage: string;
-                }>;
-            }>();
-
-            for (const d of decisions) {
-                if (!grouped.has(d.requirement_id)) {
-                    grouped.set(d.requirement_id, {
-                        requirement_id: d.requirement_id,
-                        requirement_description: d.requirement_description,
-                        decisions: []
-                    });
-                }
-                grouped.get(d.requirement_id)!.decisions.push({
-                    question_id: d.question_id,
-                    category: d.category,
-                    question: d.question,
-                    question_type: d.question_type,
-                    choices: d.choices ? JSON.parse(d.choices) : null,
-                    suggested_default: d.suggested_default,
-                    answer: d.answer,
-                    rationale: d.rationale,
-                    stage: d.stage
-                });
-            }
-
-            const result = {
-                total_decisions: decisions.length,
-                answered: decisions.filter((d: { answer: string | null }) => d.answer !== null).length,
-                unanswered: decisions.filter((d: { answer: string | null }) => d.answer === null).length,
-                by_requirement: Array.from(grouped.values())
-            };
-
-            db.close();
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(result, null, 2)
-                }]
-            };
-        } catch (error) {
-            db.close();
-            return {
-                content: [{
-                    type: 'text',
-                    text: `Failed to query design decisions: ${error instanceof Error ? error.message : String(error)}`
-                }],
-                isError: true
-            };
-        }
     }
 }

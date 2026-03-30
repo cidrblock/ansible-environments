@@ -4,7 +4,8 @@
  * Dynamically generates MCP tools from ansible-creator schema.
  */
 
-import { CreatorService, SchemaNode, ParameterSchema } from '../services/CreatorService';
+import { CreatorService } from '@ansible/core';
+import type { SchemaNode, ParameterSchema } from '@ansible/core';
 import { McpToolDefinition, McpToolResult } from './tools';
 
 export class CreatorToolGenerator {

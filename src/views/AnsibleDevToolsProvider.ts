@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { DevToolsService, DevToolPackage } from '../services/DevToolsService';
-import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import { DevToolsService } from '@ansible/core';
+import type { DevToolPackage, PythonEnvironmentApi } from '@ansible/core';
 
 export class AnsibleDevToolsProvider implements vscode.TreeDataProvider<DevToolPackage> {
     private _onDidChangeTreeData: vscode.EventEmitter<DevToolPackage | undefined | null | void> = new vscode.EventEmitter<DevToolPackage | undefined | null | void>();

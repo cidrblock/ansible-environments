@@ -25,8 +25,8 @@ import { GuidanceService } from '../services/GuidanceService';
 import { LlmService } from '../services/LlmService';
 
 // Import MCP tool generators
-import { CreatorToolGenerator } from '../../mcp/creatorTools';
-import { CollectionsService } from '../../services/CollectionsService';
+import { CreatorToolGenerator } from '@ansible/mcp-server';
+import { CollectionsService } from '@ansible/core';
 
 /**
  * Tool definition for the agent
@@ -984,7 +984,7 @@ ${guidance}`);
         // Also check what's actually installed via ansible-galaxy
         let galaxyInstalled: string[] = [];
         try {
-            const { getCommandService } = await import('../../services/CommandService');
+            const { getCommandService } = await import('@ansible/core');
             const commandService = getCommandService();
             const result = await commandService.runCommand('ansible-galaxy collection list --format json', {
                 timeout: 30000
@@ -1073,7 +1073,7 @@ ${guidance}`);
 
         try {
             // Use CommandService to run with proper venv PATH
-            const { getCommandService } = await import('../../services/CommandService');
+            const { getCommandService } = await import('@ansible/core');
             const commandService = getCommandService();
             
             const result = await commandService.runTool('ansible-lint', ['--nocolor', `"${fullPath}"`], {
@@ -1118,7 +1118,7 @@ ${guidance}`);
         }
         
         // Fallback to CommandService
-        const { getCommandService } = await import('../../services/CommandService');
+        const { getCommandService } = await import('@ansible/core');
         const commandService = getCommandService();
         
         try {

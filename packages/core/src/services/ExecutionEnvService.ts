@@ -8,7 +8,8 @@ try {
     // Running standalone (not in VS Code)
 }
 
-import { PythonEnvironmentApi, PythonEnvironment } from '../types/pythonEnvApi';
+import { PythonEnvironmentApi } from '../types/pythonEnvApi';
+import { SimpleEventEmitter } from '../utils/SimpleEventEmitter';
 
 /**
  * Information about an execution environment container image
@@ -51,23 +52,6 @@ export interface EEDetails {
         }>;
     };
     image_name?: string;
-}
-
-// Simple EventEmitter for standalone mode
-class SimpleEventEmitter<T> {
-    private listeners: Array<(e: T) => void> = [];
-    
-    public event = (listener: (e: T) => void) => {
-        this.listeners.push(listener);
-        return { dispose: () => {
-            const idx = this.listeners.indexOf(listener);
-            if (idx >= 0) this.listeners.splice(idx, 1);
-        }};
-    };
-    
-    public fire(e: T): void {
-        this.listeners.forEach(l => l(e));
-    }
 }
 
 /**

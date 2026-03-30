@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { McpToolHandler } from '@ansible/mcp-server';
 import { DesignerTreeProvider } from './views/DesignerTreeProvider';
 import { ProjectInitPanel } from './panels/ProjectInitPanel';
 import { RequirementsPanel } from './panels/RequirementsPanel';
@@ -17,6 +18,7 @@ import { DesignerDatabase } from './database/DesignerDatabase';
 import { ExportService } from './services/ExportService';
 import { ContentDesignerAgent } from './orchestrator/ContentDesignerAgent';
 import { initializeAgentTools } from './services/AgentToolService';
+import { DesignerMcpToolHandler } from './mcp/DesignerMcpToolHandler';
 
 /**
  * Content Designer activation context
@@ -42,6 +44,8 @@ export async function activateDesigner(
     log: (message: string) => void
 ): Promise<DesignerContext> {
     log('Content Designer: Activating...');
+
+    McpToolHandler.setDesignerHandler(new DesignerMcpToolHandler());
     
     const disposables: vscode.Disposable[] = [];
     
@@ -203,6 +207,8 @@ export async function activateDesigner(
  * Deactivate the Content Designer module
  */
 export function deactivateDesigner(): void {
+    McpToolHandler.setDesignerHandler(undefined);
+
     if (designerContext) {
         // Close database connections
         // designerContext.database?.close();

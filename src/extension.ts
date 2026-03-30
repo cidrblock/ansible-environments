@@ -14,16 +14,19 @@ import { PlaybooksService, PlaybookInfo, PlaybookPlay } from './services/Playboo
 import { TerminalService } from './services/TerminalService';
 import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProvider';
 import { CollectionSourcesProvider, setCollectionSourcesLogFunction } from './views/CollectionSourcesProvider';
-import { GalaxyCollectionCache } from './services/GalaxyCollectionCache';
-import { GitHubCollectionCache } from './services/GitHubCollectionCache';
-import { CollectionsService, setLogFunction as setCollectionsLogFunction } from './services/CollectionsService';
-import { DevToolsService } from './services/DevToolsService';
-import { ExecutionEnvService } from './services/ExecutionEnvService';
-import { CreatorService } from './services/CreatorService';
-import { PythonEnvironment, PythonEnvironmentApi } from './types/pythonEnvApi';
+import {
+    GalaxyCollectionCache,
+    GitHubCollectionCache,
+    CollectionsService,
+    setLogFunction as setCollectionsLogFunction,
+    DevToolsService,
+    ExecutionEnvService,
+    CreatorService,
+    cacheSelectedEnvironment,
+} from '@ansible/core';
+import type { PythonEnvironment, PythonEnvironmentApi } from '@ansible/core';
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
-import { cacheSelectedEnvironment } from './services/EnvironmentCache';
-import { activateDesigner } from './designer';
+import { activateDesigner, deactivateDesigner } from './designer';
 import { getLlmService } from './designer/services/LlmService';
 
 // Create output channel for extension logs
@@ -1084,5 +1087,6 @@ Please:
 }
 
 export function deactivate() {
+    deactivateDesigner();
     outputChannel.dispose();
 }

@@ -9,17 +9,7 @@ try {
 }
 
 import { PythonEnvironmentApi } from '../types/pythonEnvApi';
-
-// TerminalService is only available in VS Code context - lazy load to avoid
-// breaking the MCP server which runs standalone
-let TerminalService: typeof import('./TerminalService').TerminalService | undefined;
-if (vscode) {
-    try {
-        TerminalService = require('./TerminalService').TerminalService;
-    } catch {
-        // Running standalone
-    }
-}
+import { SimpleEventEmitter } from '../utils/SimpleEventEmitter';
 
 /**
  * Schema for a command parameter
@@ -44,23 +34,6 @@ export interface SchemaNode {
         required: string[];
     };
     subcommands?: Record<string, SchemaNode>;
-}
-
-// Simple EventEmitter for standalone mode
-class SimpleEventEmitter<T> {
-    private listeners: Array<(e: T) => void> = [];
-    
-    public event = (listener: (e: T) => void) => {
-        this.listeners.push(listener);
-        return { dispose: () => {
-            const idx = this.listeners.indexOf(listener);
-            if (idx >= 0) this.listeners.splice(idx, 1);
-        }};
-    };
-    
-    public fire(e: T): void {
-        this.listeners.forEach(l => l(e));
-    }
 }
 
 /**

@@ -4,8 +4,6 @@
  * These define the tools available to AI agents via the MCP protocol.
  */
 
-import { GET_BEST_PRACTICES_TOOL } from '../designer/mcp/designerTools';
-
 export interface McpToolDefinition {
     name: string;
     description: string;
@@ -557,6 +555,51 @@ Use this to understand what decisions have been made about architecture, securit
     }
 };
 
+export const GET_BEST_PRACTICES_TOOL: McpToolDefinition = {
+    name: 'get_ansible_best_practices',
+    description: `Get Ansible coding guidelines and best practices for AI-assisted development.
+
+This tool returns comprehensive guidelines covering:
+- Guiding principles (Zen of Ansible)
+- Project structure (collections, playbooks)
+- Coding standards (YAML, Python, naming conventions)
+- Role design patterns
+- Collections best practices
+- Inventories and variables
+- Plugins and modules
+- Playbook patterns
+- Testing strategies
+
+**Use this tool when**:
+- Planning what content to create
+- Generating Ansible code (playbooks, roles, modules)
+- Reviewing or improving existing automation
+- Understanding Ansible conventions
+
+**Sections available**:
+- full: Complete guidelines document
+- principles: Zen of Ansible and guiding principles
+- project_structure: Collection and playbook project layouts
+- naming: Naming conventions for all content types
+- roles: Role design, parameters, templates
+- collections: Collection structure and organization
+- playbooks: Playbook patterns and best practices
+- testing: Testing strategies and validation
+
+Returns the guidelines in Markdown format.`,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            section: {
+                type: 'string',
+                description: 'Specific section to retrieve. Use "full" for complete document.',
+                enum: ['full', 'principles', 'project_structure', 'naming', 'roles', 'collections', 'playbooks', 'testing'],
+                default: 'full'
+            }
+        }
+    }
+};
+
 // === Collection of all static tools ===
 
 export const STATIC_TOOLS: McpToolDefinition[] = [
@@ -588,5 +631,5 @@ export const STATIC_TOOLS: McpToolDefinition[] = [
     QUERY_DESIGN_DB_TOOL,
     GET_REQUIREMENTS_TOOL,
     GET_DESIGN_DECISIONS_TOOL,
-    GET_BEST_PRACTICES_TOOL as unknown as McpToolDefinition,
+    GET_BEST_PRACTICES_TOOL,
 ];
