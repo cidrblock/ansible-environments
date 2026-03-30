@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CollectionsService } from '@ansible/core';
-import type { PluginOption, PluginDoc, PluginReturn, PluginData } from '@ansible/core';
+import type { PluginOption, PluginReturn, PluginData } from '@ansible/core';
 
 // Helper to normalize string or string[] to string[]
 function toArray(value: string | string[] | undefined): string[] {
@@ -1612,7 +1612,7 @@ ${this._escapeHtml(section.afterState)}</div>`;
             }
             
             // Check if line has an inline comment
-            const commentMatch = line.match(/^(.+?)(  # .*)$/);
+            const commentMatch = line.match(/^(.+?)( {2}# .*)$/);
             let codePart = line;
             let commentPart = '';
             
@@ -1690,7 +1690,7 @@ ${this._escapeHtml(section.afterState)}</div>`;
 
     private _highlightComment(comment: string): string {
         // Check for structured comment: # (type, required/optional) description
-        const structuredMatch = comment.match(/^(  # \()([^,]+)(, )(required|optional)(\) )(.*)$/);
+        const structuredMatch = comment.match(/^( {2}# \()([^,]+)(, )(required|optional)(\) )(.*)$/);
         if (structuredMatch) {
             const [, prefix, type, comma, reqOpt, closeParen, desc] = structuredMatch;
             const reqClass = reqOpt === 'required' ? 'yaml-comment-required' : 'yaml-comment-optional';

@@ -1,3 +1,4 @@
+/// <reference types="wdio-vscode-service" />
 import path from "path";
 import type { Options } from "@wdio/types";
 

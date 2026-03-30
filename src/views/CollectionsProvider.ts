@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CollectionsService, CollectionInfo, PluginInfo, CollectionData } from '@ansible/core';
+import { CollectionsService, CollectionInfo, PluginInfo } from '@ansible/core';
 import type { PythonEnvironmentApi } from '@ansible/core';
 import { log } from '../extension';
 

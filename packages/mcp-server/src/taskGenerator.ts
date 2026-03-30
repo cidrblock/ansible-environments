@@ -219,7 +219,7 @@ export class TaskGenerator {
             .join(' ');
     }
 
-    private _formatValue(value: unknown, depth: number): string {
+    private _formatValue(value: unknown, _depth: number): string {
         if (value === null || value === undefined) {
             return 'null';
         }

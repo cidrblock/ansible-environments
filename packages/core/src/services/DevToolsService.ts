@@ -1,5 +1,3 @@
-import * as path from 'path';
-
 // Conditional vscode import - only used when available
 let vscode: typeof import('vscode') | undefined;
 try {
@@ -19,12 +17,16 @@ export interface DevToolPackage {
     version: string;
 }
 
-/**
- * Service for managing Ansible Dev Tools packages.
- * This service works both in VS Code and standalone (for MCP server).
- */
+interface TerminalServiceLike {
+    getInstance(): {
+        createActivatedTerminal(opts: { name: string; show: boolean }): Promise<{
+            sendCommand(cmd: string, opts: { waitForCompletion: boolean }): void;
+        }>;
+    };
+}
+
 export class DevToolsService {
-    private static terminalServiceFactory: (() => any) | undefined;
+    private static terminalServiceFactory: (() => TerminalServiceLike) | undefined;
 
     private static _instance: DevToolsService | undefined;
     private _pythonEnvApi: PythonEnvironmentApi | undefined;
@@ -57,7 +59,7 @@ export class DevToolsService {
     /**
      * Register how to obtain TerminalService from the extension host (VS Code only).
      */
-    public static setTerminalServiceFactory(factory: () => any): void {
+    public static setTerminalServiceFactory(factory: () => TerminalServiceLike): void {
         DevToolsService.terminalServiceFactory = factory;
     }
 

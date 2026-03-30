@@ -141,14 +141,7 @@ export class PlaybookProgressPanel {
         // Reset the webview state for new run
         this._panel.webview.postMessage({ command: 'reset' });
         
-        // Build environment with callback plugin
         const callbackPath = path.join(options.extensionPath, 'resources', 'callback_plugins');
-        const env: Record<string, string> = {
-            ...process.env as Record<string, string>,
-            ANSIBLE_CALLBACK_PLUGINS: callbackPath,
-            ANSIBLE_CALLBACKS_ENABLED: 'vscode_progress',
-            ANSIBLE_ENV_SOCKET: this._socketPath || '',
-        };
 
         log(`PlaybookProgress: Starting with socket ${this._socketPath}`);
         log(`PlaybookProgress: Callback plugins path: ${callbackPath}`);

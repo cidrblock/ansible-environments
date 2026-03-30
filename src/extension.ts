@@ -16,15 +16,12 @@ import { McpToolsProvider, injectToolPromptIntoChat } from './views/McpToolsProv
 import { CollectionSourcesProvider, setCollectionSourcesLogFunction } from './views/CollectionSourcesProvider';
 import {
     GalaxyCollectionCache,
-    GitHubCollectionCache,
     CollectionsService,
     setLogFunction as setCollectionsLogFunction,
     DevToolsService,
-    ExecutionEnvService,
-    CreatorService,
     cacheSelectedEnvironment,
 } from '@ansible/core';
-import type { PythonEnvironment, PythonEnvironmentApi } from '@ansible/core';
+import type { PythonEnvironment, PythonEnvironmentApi, SchemaNode } from '@ansible/core';
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
 import { getLlmService } from './services/LlmService';
 
@@ -567,11 +564,10 @@ Please:
     const creatorOpenFormCommand = vscode.commands.registerCommand(
         'ansibleCreator.openForm',
         (arg1: string[] | { commandPath: string[]; schema: unknown }, arg2?: unknown) => {
-            // Handle both direct call (commandPath, schema) and context menu call (node)
             if (Array.isArray(arg1)) {
-                CreatorFormPanel.show(context.extensionUri, arg1, arg2 as any);
+                CreatorFormPanel.show(context.extensionUri, arg1, arg2 as SchemaNode);
             } else if (arg1 && arg1.commandPath) {
-                CreatorFormPanel.show(context.extensionUri, arg1.commandPath, arg1.schema as any);
+                CreatorFormPanel.show(context.extensionUri, arg1.commandPath, arg1.schema as SchemaNode);
             }
         }
     );

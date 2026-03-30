@@ -1,5 +1,3 @@
-import * as path from 'path';
-
 // Conditional vscode import - only used when available
 let vscode: typeof import('vscode') | undefined;
 try {

@@ -36,11 +36,6 @@ class LoadingNode {
     constructor(public readonly message: string) {}
 }
 
-interface FolderTree {
-    folders: Map<string, FolderTree>;
-    playbooks: PlaybookInfo[];
-}
-
 export class PlaybooksProvider implements vscode.TreeDataProvider<TreeNode> {
     private _service: PlaybooksService;
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | null | void>();

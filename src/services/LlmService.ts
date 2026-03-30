@@ -456,14 +456,14 @@ export class LlmService {
         
         // Exact match
         let match = models.find(m => m.id === legacyId);
-        if (match) return match;
+        if (match) { return match; }
         
         // Normalized match
         match = models.find(m => {
             const normalized = normalize(m.id);
             return normalized.includes(normalizedLegacy) || normalizedLegacy.includes(normalized);
         });
-        if (match) return match;
+        if (match) { return match; }
         
         // Partial match on key terms
         if (legacyId.toLowerCase().includes('opus')) {
