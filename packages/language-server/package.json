@@ -16,8 +16,6 @@
   "dependencies": {
     "@ansible/core": "*",
     "@flatten-js/interval-tree": "^2.0.3",
-    "ajv": "^8.18.0",
-    "ajv-formats": "^3.0.1",
     "antsibull-docs": "^1.1.4",
     "glob": "^13.0.6",
     "ini": "^6.0.0",

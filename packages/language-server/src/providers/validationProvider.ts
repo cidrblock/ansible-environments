@@ -9,11 +9,7 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { ValidationManager } from "../services/validationManager";
 import type { WorkspaceFolderContext } from "../services/workspaceManager";
 import { isPlaybook, parseAllDocuments } from "../utils/yaml";
-import { SchemaService } from "../services/schemaService";
-import { SchemaValidator } from "../services/schemaValidator";
 import { getCommandService } from "@ansible/core/out/services/CommandService";
-
-let schemaValidator: SchemaValidator | undefined;
 
 export async function doValidate(
   textDocument: TextDocument,
@@ -21,7 +17,6 @@ export async function doValidate(
   quick = true,
   context?: WorkspaceFolderContext,
   connection?: Connection,
-  schemaService?: SchemaService,
 ): Promise<Map<string, Diagnostic[]>> {
   let diagnosticsByFile = new Map<string, Diagnostic[]>();
 
@@ -77,15 +72,6 @@ export async function doValidate(
     for (const [fileUri, fileDiagnostics] of diagnosticsByFile) {
       if (textDocument.uri === fileUri) {
         fileDiagnostics.push(...getYamlValidation(textDocument));
-
-        if (schemaService) {
-          const schemaDiagnostics = await getSchemaValidation(
-            textDocument,
-            schemaService,
-            connection,
-          );
-          fileDiagnostics.push(...schemaDiagnostics);
-        }
       }
     }
   }
@@ -144,28 +130,4 @@ export function getYamlValidation(textDocument: TextDocument): Diagnostic[] {
   });
 
   return diagnostics;
-}
-
-async function getSchemaValidation(
-  textDocument: TextDocument,
-  schemaService: SchemaService,
-  connection?: Connection,
-): Promise<Diagnostic[]> {
-  if (!schemaService.shouldValidateWithSchema(textDocument)) {
-    return [];
-  }
-
-  const schema = await schemaService.getSchemaForDocument(textDocument);
-  if (!schema) return [];
-
-  if (!schemaValidator) {
-    schemaValidator = new SchemaValidator();
-  }
-
-  try {
-    return schemaValidator.validate(textDocument, schema);
-  } catch (err) {
-    connection?.console.error(`Schema validation error: ${err}`);
-    return [];
-  }
 }

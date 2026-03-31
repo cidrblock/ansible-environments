@@ -10,8 +10,6 @@ import {
 import { Position, TextDocument } from "vscode-languageserver-textdocument";
 import { isNode, isScalar, Node, YAMLMap } from "yaml";
 import type { WorkspaceFolderContext } from "../services/workspaceManager";
-import type { SchemaService } from "../services/schemaService";
-import { SchemaCompleter } from "../services/schemaCompleter";
 import {
   blockKeywords,
   playKeywords,
@@ -53,25 +51,12 @@ const priorityMap = {
 
 let dummyMappingCharacter: string;
 let isAnsiblePlaybook: boolean;
-let schemaCompleter: SchemaCompleter | undefined;
 
 export async function doCompletion(
   document: TextDocument,
   position: Position,
   context: WorkspaceFolderContext,
-  schemaService?: SchemaService,
 ): Promise<CompletionItem[]> {
-  if (schemaService && schemaService.shouldValidateWithSchema(document)) {
-    const schemaCompletions = await getSchemaCompletions(
-      document,
-      position,
-      schemaService,
-    );
-    if (schemaCompletions.length > 0) {
-      return schemaCompletions;
-    }
-  }
-
   isAnsiblePlaybook = isPlaybook(document);
 
   let preparedText = document.getText();
@@ -534,17 +519,4 @@ export function resolveSuffix(
     default:
       return " ";
   }
-}
-
-async function getSchemaCompletions(
-  document: TextDocument,
-  position: Position,
-  schemaService: SchemaService,
-): Promise<CompletionItem[]> {
-  const schema = await schemaService.getSchemaForDocument(document);
-  if (!schema) return [];
-  if (!schemaCompleter) {
-    schemaCompleter = new SchemaCompleter();
-  }
-  return schemaCompleter.complete(document, position, schema);
 }
