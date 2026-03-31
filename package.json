@@ -31,6 +31,110 @@
     "ms-python.vscode-python-envs"
   ],
   "contributes": {
+    "languages": [
+      {
+        "aliases": [
+          "Ansible",
+          "ansible"
+        ],
+        "configuration": "./ansible-language-configuration.json",
+        "extensions": [
+          ".ansible.yml",
+          ".ansible.yaml"
+        ],
+        "filenamePatterns": [
+          "**/playbooks/*.yml",
+          "**/playbooks/*.yaml",
+          "**/*playbook*.yml",
+          "**/*playbook*.yaml",
+          "**/roles/**/main.yml",
+          "**/roles/**/main.yaml"
+        ],
+        "filenames": [
+          "site.yml",
+          "site.yaml"
+        ],
+        "firstLine": "# code: language=ansible",
+        "id": "ansible"
+      },
+      {
+        "configuration": "./jinja-language-configuration.json",
+        "id": "ansible-jinja"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ansible",
+        "path": "./syntaxes/external/YAML.tmLanguage",
+        "scopeName": "source.ansible"
+      },
+      {
+        "language": "ansible-jinja",
+        "path": "./syntaxes/external/jinja.tmLanguage.json",
+        "scopeName": "source.ansible-jinja"
+      },
+      {
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/keywords.tmLanguage",
+        "scopeName": "injection.ansible.keywords"
+      },
+      {
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/jinja-extras.tmLanguage",
+        "scopeName": "injection.ansible.jinja-extras"
+      },
+      {
+        "embeddedLanguages": {
+          "meta.embedded.inline.jinja": "ansible-jinja"
+        },
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/jinja-braces.tmLanguage",
+        "scopeName": "injection.ansible.jinja-braces"
+      },
+      {
+        "embeddedLanguages": {
+          "meta.embedded.inline.jinja": "ansible-jinja"
+        },
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/jinja-conditionals.tmLanguage",
+        "scopeName": "injection.ansible.jinja-conditionals"
+      },
+      {
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/jinja-single-quote-escape.tmLanguage",
+        "scopeName": "injection.ansible.jinja-single-quote-escape"
+      },
+      {
+        "injectTo": [
+          "source.ansible"
+        ],
+        "path": "./syntaxes/ansible/generated/jinja-double-quote-escape.tmLanguage",
+        "scopeName": "injection.ansible.jinja-double-quote-escape"
+      }
+    ],
+    "configurationDefaults": {
+      "[ansible]": {
+        "editor.autoIndent": "advanced",
+        "editor.detectIndentation": true,
+        "editor.insertSpaces": true,
+        "editor.quickSuggestions": {
+          "comments": true,
+          "other": true,
+          "strings": true
+        },
+        "editor.tabSize": 2
+      }
+    },
     "mcpServerDefinitionProviders": [
       {
         "id": "ansibleEnvironments",
@@ -612,6 +716,8 @@
     "test:ui": "wdio run wdio.conf.ts"
   },
   "devDependencies": {
+    "@types/ini": "^4.1.1",
+    "@types/lodash": "^4.17.24",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.10.0",
     "@types/vscode": "^1.93.0",
@@ -638,6 +744,7 @@
     "@types/js-yaml": "^4.0.9",
     "@vscode-elements/elements": "^1.6.0",
     "js-yaml": "^4.1.1",
+    "vscode-languageclient": "^9.0.1",
     "zod": "^4.3.5",
     "zod-to-json-schema": "^3.25.1"
   }
