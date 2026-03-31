@@ -281,6 +281,11 @@
     ],
     "commands": [
       {
+        "command": "ansibleEnvironments.vault",
+        "category": "Ansible",
+        "title": "Vault: Encrypt/Decrypt"
+      },
+      {
         "command": "ansibleDevToolsPackages.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
@@ -509,6 +514,13 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "ansibleEnvironments.vault",
+          "when": "editorLangId == ansible",
+          "group": "1_ansible"
+        }
+      ],
       "view/title": [
         {
           "command": "ansibleDevToolsEnvManagers.create",
@@ -820,6 +832,7 @@
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/js-yaml": "^4.0.9",
     "@vscode-elements/elements": "^1.6.0",
+    "ini": "^6.0.0",
     "js-yaml": "^4.1.1",
     "vscode-languageclient": "^9.0.1",
     "zod": "^4.3.5",

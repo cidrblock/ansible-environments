@@ -31,6 +31,7 @@ import type { PythonEnvironment, PythonEnvironmentApi, SchemaNode } from '@ansib
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
 import { getLlmService } from './services/LlmService';
 import { registerFileAssociation } from './features/fileAssociation';
+import { registerVaultCommand } from './features/vault';
 
 // Create output channel for extension logs
 export const outputChannel = vscode.window.createOutputChannel('Ansible Environments');
@@ -99,6 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true); // Show the output channel on activation
 
     registerFileAssociation(context);
+    registerVaultCommand(context);
 
     // Inject log function into services
     setCollectionsLogFunction(log);
