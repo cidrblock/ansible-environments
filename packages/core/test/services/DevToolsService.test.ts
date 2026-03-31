@@ -206,4 +206,66 @@ describe("DevToolsService", () => {
     expect(svc.isLoading()).toBe(false);
     expect(svc.isLoaded()).toBe(true);
   });
+
+  it("hasPackages returns false when no packages loaded", () => {
+    const svc = DevToolsService.getInstance();
+    expect(svc.hasPackages()).toBe(false);
+  });
+
+  it("getPackage returns undefined when package not found", () => {
+    const svc = DevToolsService.getInstance();
+    expect(svc.getPackage("nonexistent")).toBeUndefined();
+  });
+
+  it("getPackage returns the package when found", async () => {
+    mocks.mockRunTool.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: "ansible-lint 6.0.0\nansible-navigator 3.0.0\n",
+      stderr: "",
+    });
+    const svc = DevToolsService.getInstance();
+    await svc.refresh();
+    expect(svc.getPackage("ansible-lint")).toEqual({ name: "ansible-lint", version: "6.0.0" });
+  });
+
+  it("refresh handles adt failure with non-zero exit code", async () => {
+    mocks.mockRunTool.mockResolvedValueOnce({ exitCode: 1, stdout: "", stderr: "not found" });
+    const svc = DevToolsService.getInstance();
+    await svc.refresh();
+    expect(svc.getPackages()).toEqual([]);
+    expect(svc.isLoaded()).toBe(true);
+  });
+
+  it("refresh handles thrown errors gracefully", async () => {
+    mocks.mockRunTool.mockRejectedValueOnce(new Error("spawn failed"));
+    const svc = DevToolsService.getInstance();
+    await svc.refresh();
+    expect(svc.getPackages()).toEqual([]);
+  });
+
+  it("refresh skips lines that don't match expected format", async () => {
+    mocks.mockRunTool.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: "ansible-lint 6.0.0\n  some extra info\nansible-navigator 3.0.0\n",
+      stderr: "",
+    });
+    const svc = DevToolsService.getInstance();
+    await svc.refresh();
+    expect(svc.getPackages()).toHaveLength(2);
+  });
+
+  it("isInVSCode returns false in test environment", () => {
+    const svc = DevToolsService.getInstance();
+    expect(svc.isInVSCode()).toBe(false);
+  });
+
+  it("install throws when not in VS Code", async () => {
+    const svc = DevToolsService.getInstance();
+    await expect(svc.install()).rejects.toThrow("install is only available in VS Code");
+  });
+
+  it("upgrade throws when not in VS Code", async () => {
+    const svc = DevToolsService.getInstance();
+    await expect(svc.upgrade()).rejects.toThrow("upgrade is only available in VS Code");
+  });
 });

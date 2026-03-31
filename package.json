@@ -4,6 +4,10 @@
   "description": "A VS Code extension for managing Ansible development environments using the Microsoft Python Environments extension API",
   "version": "0.0.1",
   "publisher": "cidrblock",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cidrblock/ansible-environments.git"
+  },
   "icon": "resources/ansible-icon.png",
   "engines": {
     "vscode": "^1.93.0",

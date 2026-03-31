@@ -480,4 +480,450 @@ describe("GalaxyCollectionCache", () => {
     await vi.waitUntil(() => svc.isLoaded(), { timeout: 3000 });
     expect(svc.getCollections().some((c) => c.name === "c")).toBe(true);
   });
+
+  it("_loadFromFileCache returns false when cacheFilePath is undefined", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    const spy = vi.spyOn(GalaxyCollectionCache.prototype as unknown as { _cacheFilePath: string | undefined }, "_cacheFilePath", "get").mockReturnValue(undefined);
+    const result = await (svc as unknown as { _loadFromFileCache: () => Promise<boolean> })._loadFromFileCache();
+    spy.mockRestore();
+    expect(result).toBe(false);
+  });
+
+  it("_loadFromFileCache returns false for corrupted JSON", async () => {
+    const storage = path.join(tmpDir, "gs-corrupt");
+    fs.mkdirSync(storage, { recursive: true });
+    fs.writeFileSync(path.join(storage, "galaxy-collections-cache.json"), "not json", "utf8");
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    const result = await (svc as unknown as { _loadFromFileCache: () => Promise<boolean> })._loadFromFileCache();
+    expect(result).toBe(false);
+  });
+
+  it("_saveToFileCache does nothing when cacheFilePath is undefined", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    const spy = vi.spyOn(GalaxyCollectionCache.prototype as unknown as { _cacheFilePath: string | undefined }, "_cacheFilePath", "get").mockReturnValue(undefined);
+    await (svc as unknown as { _saveToFileCache: () => Promise<void> })._saveToFileCache();
+    spy.mockRestore();
+    expect(svc.isLoaded()).toBe(false);
+  });
+
+  it("_saveToFileCache handles write errors gracefully", async () => {
+    const storage = path.join(tmpDir, "gs-writeerr");
+    fs.mkdirSync(storage, { recursive: true });
+    fs.chmodSync(storage, 0o555);
+    try {
+      const svc = GalaxyCollectionCache.getInstance();
+      svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+      await (svc as unknown as { _saveToFileCache: () => Promise<void> })._saveToFileCache();
+    } finally {
+      fs.chmodSync(storage, 0o755);
+    }
+  });
+
+  it("_saveToFileCache creates directory if missing", async () => {
+    const storage = path.join(tmpDir, "gs-newdir", "nested");
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await (svc as unknown as { _saveToFileCache: () => Promise<void> })._saveToFileCache();
+    expect(fs.existsSync(path.join(storage, "galaxy-collections-cache.json"))).toBe(true);
+  });
+
+  it("_loadCollections skips API when already loaded and not force refresh", async () => {
+    const storage = path.join(tmpDir, "gs-skip");
+    fs.mkdirSync(storage, { recursive: true });
+    const cache = {
+      timestamp: Date.now(),
+      collections: [{ namespace: "a", name: "b", version: "1", deprecated: false, downloadCount: 1 }],
+    };
+    fs.writeFileSync(path.join(storage, "galaxy-collections-cache.json"), JSON.stringify(cache), "utf8");
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await svc.ensureLoaded();
+    await (svc as unknown as { _loadCollections: (force: boolean) => Promise<void> })._loadCollections(false);
+    expect(httpsGetMock).not.toHaveBeenCalled();
+  });
+
+  it("getCacheAge returns singular day form", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    (svc as unknown as { _cacheTimestamp: number })._cacheTimestamp = Date.now() - 25 * 60 * 60 * 1000;
+    expect(svc.getCacheAge()).toBe("1 day ago");
+  });
+
+  it("getCacheAge returns singular hour form", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    (svc as unknown as { _cacheTimestamp: number })._cacheTimestamp = Date.now() - 90 * 60 * 1000;
+    expect(svc.getCacheAge()).toBe("1 hour ago");
+  });
+
+  it("handles API response with absolute next URL", async () => {
+    const storage = path.join(tmpDir, "gs-abs");
+    fs.mkdirSync(storage, { recursive: true });
+
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const body =
+        call++ === 0
+          ? {
+              meta: { count: 2 },
+              links: { next: "https://galaxy.ansible.com/api/v3/collections/?page=2" },
+              data: [
+                {
+                  namespace: "p1",
+                  name: "a",
+                  deprecated: false,
+                  download_count: 10,
+                  highest_version: { version: "1.0.0" },
+                },
+              ],
+            }
+          : {
+              meta: { count: 2 },
+              links: { next: null },
+              data: [
+                {
+                  namespace: "p2",
+                  name: "b",
+                  deprecated: false,
+                  download_count: 5,
+                  highest_version: { version: "2.0.0" },
+                },
+              ],
+            };
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => {
+        cb(res);
+        queueMicrotask(() => {
+          res.emit("data", Buffer.from(JSON.stringify(body), "utf8"));
+          res.emit("end");
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await svc.forceRefresh();
+    expect(svc.getCollections()).toHaveLength(2);
+  });
+
+  it("handles API response with missing highest_version and download_count", async () => {
+    const storage = path.join(tmpDir, "gs-missing");
+    fs.mkdirSync(storage, { recursive: true });
+    installMockGalaxyResponse({
+      meta: { count: 1 },
+      links: { next: null },
+      data: [
+        {
+          namespace: "x",
+          name: "y",
+          deprecated: false,
+          download_count: undefined as unknown as number,
+          highest_version: undefined as unknown as { version: string },
+        },
+      ],
+    });
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    await svc.forceRefresh();
+    const col = svc.getCollections()[0];
+    expect(col.version).toBe("");
+    expect(col.downloadCount).toBe(0);
+  });
+
+  it("_fetchPage handles request timeout", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, _cb: unknown) => {
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => req.emit("timeout"));
+      return req as ReturnType<typeof import("https").get>;
+    });
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<unknown> })._fetchPage("https://example.com", 1);
+    await expect(p).rejects.toThrow(/timed out/);
+  });
+
+  it("_fetchPage handles request error", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, _cb: unknown) => {
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => req.emit("error", new Error("ECONNREFUSED")));
+      return req as ReturnType<typeof import("https").get>;
+    });
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<unknown> })._fetchPage("https://example.com", 1);
+    await expect(p).rejects.toThrow(/Network error/);
+  });
+
+  it("_fetchPage handles empty response body", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => {
+        cb(res);
+        queueMicrotask(() => {
+          res.emit("data", Buffer.from("", "utf8"));
+          res.emit("end");
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<unknown> })._fetchPage("https://example.com", 1);
+    await expect(p).rejects.toThrow(/Empty response/);
+  });
+
+  it("_fetchPage follows redirects with relative URL", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number; headers: Record<string, string> };
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      if (call++ === 0) {
+        res.statusCode = 301;
+        res.headers = { location: "/api/v3/collections/?page=2" };
+        queueMicrotask(() => cb(res));
+      } else {
+        res.statusCode = 200;
+        res.headers = {};
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => {
+            res.emit(
+              "data",
+              Buffer.from(
+                JSON.stringify({
+                  meta: { count: 1 },
+                  links: { next: null },
+                  data: [
+                    {
+                      namespace: "r",
+                      name: "d",
+                      deprecated: false,
+                      download_count: 1,
+                      highest_version: { version: "1.0.0" },
+                    },
+                  ],
+                }),
+                "utf8",
+              ),
+            );
+            res.emit("end");
+          });
+        });
+      }
+      return req as ReturnType<typeof import("https").get>;
+    });
+    const result = await (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage(
+      "https://galaxy.ansible.com/api",
+      3,
+    );
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_fetchPage retries on response stream error then succeeds", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number; headers: Record<string, string> };
+      res.statusCode = 200;
+      res.headers = {};
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      if (call++ === 0) {
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => res.emit("error", new Error("stream broken")));
+        });
+      } else {
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => {
+            res.emit("data", Buffer.from(JSON.stringify({
+              meta: { count: 1 }, links: { next: null },
+              data: [{ namespace: "s", name: "e", deprecated: false, download_count: 1, highest_version: { version: "1.0.0" } }],
+            }), "utf8"));
+            res.emit("end");
+          });
+        });
+      }
+      return req as ReturnType<typeof import("https").get>;
+    });
+    vi.useFakeTimers();
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage("https://example.com", 2);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await p;
+    vi.useRealTimers();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_fetchPage retries on parse error then succeeds", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => {
+        cb(res);
+        queueMicrotask(() => {
+          const body = call++ === 0
+            ? "not json"
+            : JSON.stringify({ meta: { count: 1 }, links: { next: null }, data: [{ namespace: "p", name: "e", deprecated: false, download_count: 1, highest_version: { version: "1.0.0" } }] });
+          res.emit("data", Buffer.from(body, "utf8"));
+          res.emit("end");
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+    vi.useFakeTimers();
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage("https://example.com", 2);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await p;
+    vi.useRealTimers();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_fetchPage retries on empty body then succeeds", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => {
+        cb(res);
+        queueMicrotask(() => {
+          const body = call++ === 0
+            ? ""
+            : JSON.stringify({ meta: { count: 1 }, links: { next: null }, data: [{ namespace: "e", name: "b", deprecated: false, download_count: 1, highest_version: { version: "1.0.0" } }] });
+          res.emit("data", Buffer.from(body, "utf8"));
+          res.emit("end");
+        });
+      });
+      return req as ReturnType<typeof import("https").get>;
+    });
+    vi.useFakeTimers();
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage("https://example.com", 2);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await p;
+    vi.useRealTimers();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_fetchPage retries on request error then succeeds", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      if (call++ === 0) {
+        queueMicrotask(() => req.emit("error", new Error("ECONNRESET")));
+      } else {
+        const res = new EventEmitter() as EventEmitter & { statusCode: number };
+        res.statusCode = 200;
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => {
+            res.emit("data", Buffer.from(JSON.stringify({
+              meta: { count: 1 }, links: { next: null },
+              data: [{ namespace: "r", name: "e", deprecated: false, download_count: 1, highest_version: { version: "1.0.0" } }],
+            }), "utf8"));
+            res.emit("end");
+          });
+        });
+      }
+      return req as ReturnType<typeof import("https").get>;
+    });
+    vi.useFakeTimers();
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage("https://example.com", 2);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await p;
+    vi.useRealTimers();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_fetchPage retries on timeout then succeeds", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    let call = 0;
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      if (call++ === 0) {
+        queueMicrotask(() => req.emit("timeout"));
+      } else {
+        const res = new EventEmitter() as EventEmitter & { statusCode: number };
+        res.statusCode = 200;
+        queueMicrotask(() => {
+          cb(res);
+          queueMicrotask(() => {
+            res.emit("data", Buffer.from(JSON.stringify({
+              meta: { count: 1 }, links: { next: null },
+              data: [{ namespace: "t", name: "o", deprecated: false, download_count: 1, highest_version: { version: "1.0.0" } }],
+            }), "utf8"));
+            res.emit("end");
+          });
+        });
+      }
+      return req as ReturnType<typeof import("https").get>;
+    });
+    vi.useFakeTimers();
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<{ data: unknown[] }> })._fetchPage("https://example.com", 2);
+    await vi.advanceTimersByTimeAsync(2000);
+    const result = await p;
+    vi.useRealTimers();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("_loadCollections catches fetch errors and logs them (standalone mode)", async () => {
+    const storage = path.join(tmpDir, "gs-fetcherr");
+    fs.mkdirSync(storage, { recursive: true });
+
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, _cb: unknown) => {
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => req.emit("error", new Error("DNS_FAIL")));
+      return req as ReturnType<typeof import("https").get>;
+    });
+
+    vi.useFakeTimers();
+    const svc = GalaxyCollectionCache.getInstance();
+    svc.setExtensionContext({ globalStorageUri: { fsPath: storage } });
+    const p = svc.forceRefresh();
+    await vi.advanceTimersByTimeAsync(10000);
+    await p;
+    vi.useRealTimers();
+
+    expect(svc.isLoaded()).toBe(false);
+    expect(svc.isLoading()).toBe(false);
+  });
+
+  it("_cacheFilePath returns fallback path in standalone mode", () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    const cachePath = (svc as unknown as { _cacheFilePath: string | undefined })._cacheFilePath;
+    expect(cachePath).toBeDefined();
+    expect(cachePath!).toContain("galaxy-collections-cache.json");
+  });
+
+  it("_fetchPage handles HTTP 400+ final failure after exhausting retries", async () => {
+    const svc = GalaxyCollectionCache.getInstance();
+    httpsGetMock.mockImplementation((_url: unknown, _options: unknown, cb: (res: EventEmitter) => void) => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number; statusMessage: string };
+      res.statusCode = 503;
+      res.statusMessage = "Service Unavailable";
+      const req = new EventEmitter() as EventEmitter & { destroy: () => void };
+      req.destroy = vi.fn();
+      queueMicrotask(() => cb(res));
+      return req as ReturnType<typeof import("https").get>;
+    });
+    const p = (svc as unknown as { _fetchPage: (u: string, r?: number) => Promise<unknown> })._fetchPage("https://example.com", 1);
+    await expect(p).rejects.toThrow(/HTTP 503/);
+  });
 });
