@@ -30,6 +30,7 @@ import {
 import type { PythonEnvironment, PythonEnvironmentApi, SchemaNode } from '@ansible/core';
 import { registerMcpServerProvider, isMcpAvailable, configureCursorMcp, showCursorMcpStatus, getMcpStatus } from './mcp';
 import { getLlmService } from './services/LlmService';
+import { registerFileAssociation } from './features/fileAssociation';
 
 // Create output channel for extension logs
 export const outputChannel = vscode.window.createOutputChannel('Ansible Environments');
@@ -96,7 +97,9 @@ async function openChatWithPrompt(prompt: string): Promise<void> {
 
 export function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true); // Show the output channel on activation
-    
+
+    registerFileAssociation(context);
+
     // Inject log function into services
     setCollectionsLogFunction(log);
     setCollectionSourcesLogFunction(log);
