@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import {
+    LanguageClient,
+    LanguageClientOptions,
+    ServerOptions,
+    TransportKind,
+} from 'vscode-languageclient/node';
 import { PluginDocPanel } from './panels/PluginDocPanel';
 import { AnsibleDevToolsProvider } from './views/AnsibleDevToolsProvider';
 import { EnvironmentManagersProvider } from './views/EnvironmentManagersProvider';
@@ -121,6 +127,50 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage('Ansible Environments requires an open workspace folder.');
         return;
     }
+
+    // Start the Ansible Language Server
+    const serverModule = context.asAbsolutePath(
+        path.join('packages', 'language-server', 'out', 'cli.js'),
+    );
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const serverEnv: Record<string, string> = {};
+    if (workspaceRoot) {
+        serverEnv['ANSIBLE_ENV_WORKSPACE'] = workspaceRoot;
+    }
+    const serverOptions: ServerOptions = {
+        run: {
+            module: serverModule,
+            transport: TransportKind.ipc,
+            options: { cwd: workspaceRoot, env: serverEnv },
+        },
+        debug: {
+            module: serverModule,
+            transport: TransportKind.ipc,
+            options: {
+                execArgv: ['--nolazy', '--inspect=6009'],
+                cwd: workspaceRoot,
+                env: serverEnv,
+            },
+        },
+    };
+    const clientOptions: LanguageClientOptions = {
+        documentSelector: [{ scheme: 'file', language: 'ansible' }],
+        synchronize: {
+            fileEvents: [
+                vscode.workspace.createFileSystemWatcher('**/ansible.cfg'),
+                vscode.workspace.createFileSystemWatcher('**/.ansible-lint'),
+            ],
+        },
+    };
+    const languageClient = new LanguageClient(
+        'ansibleLanguageServer',
+        'Ansible Language Server',
+        serverOptions,
+        clientOptions,
+    );
+    languageClient.start();
+    context.subscriptions.push(languageClient);
+    log('Ansible Language Server started');
 
     // Register the Environment Managers view
     const envManagersProvider = new EnvironmentManagersProvider();
@@ -1076,6 +1126,6 @@ Please:
     }
 }
 
-export function deactivate() {
+export function deactivate(): void {
     outputChannel.dispose();
 }

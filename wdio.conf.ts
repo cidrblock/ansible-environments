@@ -20,6 +20,7 @@ export const config: WebdriverIO.Config = {
       browserVersion: "stable",
       "wdio:vscodeOptions": {
         extensionPath: path.resolve(process.cwd()),
+        workspacePath: path.resolve(process.cwd(), "test", "ui", "fixtures"),
         userSettings: {
           "editor.fontSize": 14,
         },

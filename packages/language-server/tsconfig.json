@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2020",
-    "lib": ["ES2020"],
+    "lib": ["ES2022"],
     "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,
@@ -16,10 +16,8 @@
     "declarationMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", ".vscode-test", "packages"],
+  "exclude": ["node_modules", "out", "test"],
   "references": [
-    { "path": "packages/core" },
-    { "path": "packages/language-server" },
-    { "path": "packages/mcp-server" }
+    { "path": "../core" }
   ]
 }

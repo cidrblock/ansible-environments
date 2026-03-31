@@ -37,6 +37,14 @@ export default defineConfig({
       },
       {
         test: {
+          name: "ls",
+          root: "packages/language-server",
+          include: ["test/**/*.test.ts"],
+          environment: "node",
+        },
+      },
+      {
+        test: {
           name: "ext",
           include: ["test/unit/**/*.test.ts"],
           environment: "node",

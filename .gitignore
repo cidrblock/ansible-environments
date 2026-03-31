@@ -7,4 +7,5 @@ node_modules
 *.tsbuildinfo
 .DS_Store
 .cache/
+.venv/
 coverage/
