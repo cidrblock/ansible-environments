@@ -415,4 +415,232 @@ description: [a, b]
     const col = (svc as any)._parseGalaxyYml(yaml2, "org/repo", "org");
     expect(col?.description).toBe("a b");
   });
+
+  it("_saveToDisk creates cache dir and writes file", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const cache = {
+      org: "saveorg",
+      collections: [
+        {
+          namespace: "s",
+          name: "c",
+          version: "1.0.0",
+          description: "",
+          repository: "s/c",
+          org: "saveorg",
+          htmlUrl: "https://github.com/s/c",
+          installUrl: "git+https://github.com/s/c.git",
+        },
+      ],
+      lastUpdated: new Date().toISOString(),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (svc as any)._saveToDisk("saveorg", cache);
+    const written = JSON.parse(fs.readFileSync(path.join(cacheDir, "github-saveorg.json"), "utf-8"));
+    expect(written.collections).toHaveLength(1);
+  });
+
+  it("_saveToDisk handles write errors gracefully", () => {
+    const log = vi.fn();
+    const svc = GitHubCollectionCache.getInstance();
+    svc.setLogFunction(log);
+    try {
+      fs.chmodSync(cacheDir, 0o555);
+      const cache = { org: "err", collections: [], lastUpdated: new Date().toISOString() };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (svc as any)._saveToDisk("err", cache);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("Error saving cache"));
+    } finally {
+      fs.chmodSync(cacheDir, 0o755);
+    }
+  });
+
+  it("_formatAge returns singular forms for 1 minute and 1 hour", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fmt = (svc as any)._formatAge.bind(svc) as (ms: number) => string;
+    expect(fmt(60 * 1000)).toBe("1 minute ago");
+    expect(fmt(60 * 60 * 1000)).toBe("1 hour ago");
+    expect(fmt(24 * 60 * 60 * 1000)).toBe("1 day ago");
+  });
+
+  it("_parseGalaxyYml returns null for non-object YAML", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((svc as any)._parseGalaxyYml("just a string", "o/r", "o")).toBeNull();
+  });
+
+  it("_parseGalaxyYml returns null for invalid YAML", () => {
+    const log = vi.fn();
+    const svc = GitHubCollectionCache.getInstance();
+    svc.setLogFunction(log);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((svc as any)._parseGalaxyYml("{{invalid: yaml: [", "o/r", "o")).toBeNull();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Failed to parse galaxy.yml"));
+  });
+
+  it("_parseGalaxyYml uses 0.0.0 when version is missing", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const yml = "namespace: ns\nname: nm\ndescription: test\n";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const col = (svc as any)._parseGalaxyYml(yml, "o/r", "o");
+    expect(col.version).toBe("0.0.0");
+  });
+
+  it("_parseGalaxyYml handles empty description", () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const yml = "namespace: ns\nname: nm\nversion: 1.0.0\n";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const col = (svc as any)._parseGalaxyYml(yml, "o/r", "o");
+    expect(col.description).toBe("");
+  });
+
+  it("_scanOrg uses code search API and fetches metadata", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const searchResponse = {
+      items: [{ repository: { full_name: "org/repo1", html_url: "https://github.com/org/repo1" } }],
+    };
+    const galaxyYml =
+      "namespace: testns\nname: testcol\nversion: 2.0.0\ndescription: A test\n";
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => searchResponse })
+      .mockResolvedValueOnce({ ok: true, text: async () => galaxyYml });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrg("org", "fake-token");
+    expect(result).toHaveLength(1);
+    expect(result[0].namespace).toBe("testns");
+    expect(result[0].name).toBe("testcol");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrg falls back to repo scan when code search fails", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const log = vi.fn();
+    svc.setLogFunction(log);
+
+    const galaxyYml = "namespace: fb\nname: col\nversion: 1.0.0\ndescription: fallback\n";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ full_name: "org/repo", html_url: "h" }] })
+      .mockResolvedValueOnce({ ok: true, text: async () => galaxyYml });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrg("org", "token");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("falling back to repo scan"));
+    expect(result).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrg returns empty when no galaxy.yml files found", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ items: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrg("emptyorg", "token");
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrg handles fetch errors gracefully", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const log = vi.fn();
+    svc.setLogFunction(log);
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("network down"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrg("errorg", "token");
+    expect(result).toEqual([]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Error scanning errorg"));
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrgRepos paginates and stops when page is short", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const galaxyYml = "namespace: pg\nname: col\nversion: 1.0.0\ndescription: page\n";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ full_name: "org/r1", html_url: "h" }] })
+      .mockResolvedValueOnce({ ok: true, text: async () => galaxyYml });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrgRepos("org", "token");
+    expect(result).toHaveLength(1);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrgRepos stops on non-ok response", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrgRepos("org", "token");
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_scanOrgRepos skips repos without galaxy.yml", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ full_name: "org/nope", html_url: "h" }] })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._scanOrgRepos("org", "token");
+    expect(result).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_fetchCollectionMetadata tries galaxy.yml then galaxy.yaml with main and HEAD branches", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const galaxyYaml = "namespace: ns\nname: nm\nversion: 3.0.0\ndescription: found\n";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true, text: async () => galaxyYaml });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._fetchCollectionMetadata("org/repo", "token", "org");
+    expect(result).not.toBeNull();
+    expect(result.version).toBe("3.0.0");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("_fetchCollectionMetadata returns null when no file found", async () => {
+    const svc = GitHubCollectionCache.getInstance();
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (svc as any)._fetchCollectionMetadata("org/repo", "token", "org");
+    expect(result).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
 });

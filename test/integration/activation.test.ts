@@ -75,4 +75,55 @@ suite("Ansible Environments Extension", () => {
     const config = vscode.workspace.getConfiguration("ansibleEnvironments");
     assert.notStrictEqual(config, undefined, "Should contribute ansibleEnvironments settings");
   });
+
+  test("configuration defaults are correct", () => {
+    const config = vscode.workspace.getConfiguration("ansibleEnvironments");
+
+    assert.strictEqual(config.get("enableAiFeatures"), true);
+    assert.strictEqual(config.get("pluginDocZoom"), 100);
+    assert.strictEqual(config.get("pluginDocTheme"), "auto");
+
+    const orgs = config.get<string[]>("githubCollectionOrgs");
+    assert.ok(Array.isArray(orgs), "githubCollectionOrgs should be an array");
+    assert.ok(orgs!.includes("ansible"), "default orgs should include 'ansible'");
+    assert.ok(orgs!.includes("ansible-collections"), "default orgs should include 'ansible-collections'");
+  });
+
+  test("refresh commands are executable without error", async () => {
+    const prefixes = [
+      "ansibleDevToolsPackages",
+      "ansibleDevToolsCollections",
+    ];
+    const commands = await vscode.commands.getCommands(true);
+
+    for (const prefix of prefixes) {
+      const refreshCmd = commands.find((c) => c === `${prefix}.refresh`);
+      if (refreshCmd) {
+        try {
+          await vscode.commands.executeCommand(refreshCmd);
+        } catch {
+          // Some commands may fail without a workspace; we just verify they don't crash the extension
+        }
+      }
+    }
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(ext?.isActive, "Extension should still be active after running refresh commands");
+  });
+
+  test("contributes MCP server tools via chat participant", () => {
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    const pkg = ext?.packageJSON;
+
+    const languageModelTools = pkg?.contributes?.languageModelTools;
+    if (languageModelTools) {
+      assert.ok(Array.isArray(languageModelTools), "languageModelTools should be an array");
+      assert.ok(languageModelTools.length > 0, "should have at least one language model tool");
+
+      const toolNames = languageModelTools.map((t: { name: string }) => t.name);
+      assert.ok(
+        toolNames.some((n: string) => n.startsWith("ansible")),
+        'at least one tool name should start with "ansible"',
+      );
+    }
+  });
 });

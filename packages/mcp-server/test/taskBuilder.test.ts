@@ -149,4 +149,145 @@ describe('TaskBuilder', () => {
         expect(result.status).toBe('error');
         expect(result.message).toContain('Provide either session_id');
     });
+
+    it('cancel removes session', async () => {
+        const startResult = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const sessionId = startResult.session_id!;
+        const result = await builder.build({ session_id: sessionId, cancel: true });
+        expect(result.status).toBe('cancelled');
+        expect(builder.getActiveSessionCount()).toBe(0);
+    });
+
+    it('returns error when neither session_id nor plugin provided', async () => {
+        const result = await builder.build({});
+        expect(result.status).toBe('error');
+        expect(result.message).toContain('session_id');
+    });
+
+    it('generate with missing required params returns in_progress', async () => {
+        const startResult = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const result = await builder.build({ session_id: startResult.session_id, generate: true });
+        expect(result.status).toBe('in_progress');
+        expect(result.can_generate).toBe(false);
+        expect(result.missing_required!.length).toBeGreaterThan(0);
+    });
+
+    it('collects task options across builds', async () => {
+        const start = await builder.build({ plugin: 'ansible.builtin.copy' });
+        await builder.build({
+            session_id: start.session_id,
+            task_name: 'My task',
+            become: true,
+            register: 'result',
+            when: "ansible_os_family == 'Debian'",
+        });
+        const result = await builder.build({
+            session_id: start.session_id,
+            params: { src: '/a', dest: '/b' },
+            generate: true,
+        });
+        expect(result.status).toBe('complete');
+        expect(result.yaml).toContain('name: My task');
+        expect(result.yaml).toContain('become: true');
+        expect(result.yaml).toContain('register: result');
+        expect(result.yaml).toContain('when:');
+    });
+
+    it('_formatYamlValue handles multiline strings with block scalar', () => {
+        const fmt = (builder as unknown as { _formatYamlValue: (v: unknown, i: number) => string })._formatYamlValue.bind(builder);
+        const result = fmt('line1\nline2', 0);
+        expect(result).toContain('|');
+        expect(result).toContain('line1');
+    });
+
+    it('_formatYamlValue handles YAML-sensitive strings by quoting', () => {
+        const fmt = (builder as unknown as { _formatYamlValue: (v: unknown, i: number) => string })._formatYamlValue.bind(builder);
+        expect(fmt('true', 0)).toBe('"true"');
+        expect(fmt('123', 0)).toBe('"123"');
+        expect(fmt('key: val', 0)).toContain('"');
+        expect(fmt('has # comment', 0)).toContain('"');
+    });
+
+    it('_formatYamlValue handles arrays and objects', () => {
+        const fmt = (builder as unknown as { _formatYamlValue: (v: unknown, i: number) => string })._formatYamlValue.bind(builder);
+        expect(fmt([], 0)).toBe('[]');
+        expect(fmt([1, 2], 0)).toBe('[1, 2]');
+        expect(fmt([{ a: 1 }], 0)).toContain('{');
+        expect(fmt({ key: 'val' }, 0)).toContain('{');
+    });
+
+    it('_formatYamlValue handles null, undefined, boolean, number', () => {
+        const fmt = (builder as unknown as { _formatYamlValue: (v: unknown, i: number) => string })._formatYamlValue.bind(builder);
+        expect(fmt(null, 0)).toBe('null');
+        expect(fmt(undefined, 0)).toBe('null');
+        expect(fmt(true, 0)).toBe('true');
+        expect(fmt(false, 0)).toBe('false');
+        expect(fmt(42, 0)).toBe('42');
+    });
+
+    it('session cleanup removes expired sessions', async () => {
+        const start = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const session = (builder as unknown as { _sessions: Map<string, { createdAt: number }> })._sessions.get(start.session_id!);
+        session!.createdAt = Date.now() - 20 * 60 * 1000;
+        await builder.build({ plugin: 'ansible.builtin.copy' });
+        expect((builder as unknown as { _sessions: Map<string, unknown> })._sessions.has(start.session_id!)).toBe(false);
+    });
+
+    it('_generateYaml uses plugin suffix for default task name', async () => {
+        const start = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const result = await builder.build({
+            session_id: start.session_id,
+            params: { src: 'a', dest: 'b' },
+            generate: true,
+        });
+        expect(result.yaml).toMatch(/^- name: Copy$/m);
+    });
+
+    it('_generateYaml formats multiline param value as block', async () => {
+        const start = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const result = await builder.build({
+            session_id: start.session_id,
+            params: { src: 'a', dest: 'b', content: 'line1\nline2' },
+            generate: true,
+        });
+        expect(result.yaml).toContain('content:');
+        expect(result.yaml).toContain('|');
+    });
+
+    it('_buildPromptMessage includes optional params when all required are met', async () => {
+        const start = await builder.build({ plugin: 'ansible.builtin.copy' });
+        const result = await builder.build({
+            session_id: start.session_id,
+            params: { src: 'a', dest: 'b' },
+        });
+        expect(result.message).toContain('Ready to generate');
+        expect(result.optional_available!.length).toBeGreaterThan(0);
+    });
+
+    it('_getShortDescription truncates long descriptions', () => {
+        const getDesc = (builder as unknown as { _getShortDescription: (spec?: unknown) => string })._getShortDescription.bind(builder);
+        expect(getDesc(undefined)).toBe('');
+        expect(getDesc({ description: 'short' })).toBe('short');
+        expect(getDesc({ description: 'x'.repeat(150) })).toHaveLength(100);
+        expect(getDesc({ description: ['first line', 'second line'] })).toBe('first line');
+    });
+
+    it('_updateMissingRequired handles aliases', async () => {
+        mockGetPluginDocumentation.mockResolvedValue({
+            doc: {
+                short_description: 'Test',
+                options: {
+                    source: { required: true, type: 'str', aliases: ['src'] },
+                    dest: { required: true, type: 'str' },
+                },
+            },
+        });
+        const start = await builder.build({ plugin: 'test.aliased' });
+        const result = await builder.build({
+            session_id: start.session_id,
+            params: { src: '/a', dest: '/b' },
+        });
+        expect(result.can_generate).toBe(true);
+        expect(result.missing_required).toEqual([]);
+    });
 });
