@@ -62,7 +62,7 @@ const hoisted = vi.hoisted(() => {
         listPluginTypes,
         getPlugins,
         installCollection,
-        onDidChange: vi.fn((listener: () => void) => ({ dispose: vi.fn() })),
+        onDidChange: vi.fn((_listener: () => void) => ({ dispose: vi.fn() })),
     };
 
     const galaxyInstance = {

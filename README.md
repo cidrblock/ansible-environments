@@ -200,6 +200,16 @@ The test suite uses:
 npx vsce package      # Package the extension as a VSIX
 ```
 
+### Alpha releases (VSIX on GitHub)
+
+Publishing a **pre-release** on GitHub triggers Actions to build the VSIX and attach it to that release (see `.github/workflows/release-vsix.yml`).
+
+1. Bump `version` in `package.json` on the commit you are releasing (the VSIX name and manifest use this field).
+2. Create and push a tag for that commit (for example `v0.0.1-alpha.1`).
+3. On GitHub, create a **Release** from that tag, enable **Set as a pre-release**, then **Publish release**. The workflow uploads `*.vsix` to the release assets.
+
+Stable releases are not wired to this workflow; only pre-releases run the upload job.
+
 ## License
 
 MIT
