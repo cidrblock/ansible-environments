@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import { YAMLMap } from "yaml";
 import {
   AncestryBuilder,
   getPathAt,
@@ -58,7 +59,6 @@ describe("getOrigRange", () => {
 describe("getYamlMapKeys", () => {
   it("extracts string keys from a YAML map", () => {
     const docs = parseAllDocuments("foo: 1\nbar: 2\nbaz: 3");
-    const { YAMLMap } = require("yaml");
     const mapNode = docs[0].contents;
     expect(mapNode).toBeInstanceOf(YAMLMap);
     const keys = getYamlMapKeys(mapNode as InstanceType<typeof YAMLMap>);

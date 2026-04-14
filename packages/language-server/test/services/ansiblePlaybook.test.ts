@@ -7,7 +7,7 @@ vi.mock("@ansible/core/out/services/CommandService", () => ({
   getCommandService: () => ({ runTool: runToolMock }),
 }));
 
-function mockConnection(progressSupport = false) {
+function mockConnection(_progressSupport = false) {
   return {
     window: {
       createWorkDoneProgress: vi.fn().mockResolvedValue({
